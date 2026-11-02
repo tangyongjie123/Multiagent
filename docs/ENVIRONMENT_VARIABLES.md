@@ -8,21 +8,45 @@
 
 | 服务 | 用途 | 是否必需 | 环境变量 |
 | --- | --- | --- | --- |
-| DeepSeek Chat API | 主 Agent 和六个子 Agent 的推理与工具调用 | 必需 | `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL` |
+| Chat API | 主 Agent 和六个子 Agent 的推理与工具调用 | 必需 | `CHAT_PROVIDER` 及对应提供方密钥 |
 | Embedding API | 将代码和文档转换为向量后写入 Milvus | 必需 | `EMBEDDING_API_KEY`、`EMBEDDING_BASE_URL`、`EMBEDDING_MODEL`、`EMBEDDING_DIMENSION` |
 | Reranker API | 对 Milvus 召回结果重新排序 | 可选 | `RERANK_API_KEY`、`RERANK_BASE_URL`、`RERANK_MODEL` |
 
-DeepSeek 用于对话和代码生成。Embedding 不能默认复用 DeepSeek Chat API，必须选择明确提供 Embedding 接口的模型服务，或后续改为本地 Embedding 模型。
+当前 DeepSeek Key 返回 `401`，因此开发环境使用现有 DashScope 兼容接口的 `qwen3.8-flash` 作为对话模型。Embedding 使用 DashScope 的 `qwen3.7-text-embedding`。
+
+```dotenv
+CHAT_PROVIDER=dashscope
+DASHSCOPE_API_KEY=...
+DASHSCOPE_BASE_URL=...
+DASHSCOPE_CHAT_MODEL=qwen3.8-flash
+```
+
+如需切回 DeepSeek，将 `CHAT_PROVIDER` 改为 `deepseek`，并配置有效的 `DEEPSEEK_API_KEY`。
+
+DeepSeek 的 `/models` 即使使用无效 Bearer 也可能返回 200，因此不能作为认证检查。项目对 DeepSeek 使用 `/user/balance` 验证凭证，对 DashScope 使用 `/models`。
+
+当前已验证 DashScope 兼容接口提供 `qwen3.7-text-embedding`，向量维度为 1024。通用 `EMBEDDING_*` 未配置时，应用自动使用以下 DashScope 配置：
+
+```dotenv
+DASHSCOPE_API_KEY=...
+DASHSCOPE_BASE_URL=...
+DASHSCOPE_EMBEDDING_MODEL=qwen3.7-text-embedding
+DASHSCOPE_EMBEDDING_DIMENSION=1024
+```
 
 ## 必需的数据服务
 
 | 服务 | 用途 | 连接信息 |
 | --- | --- | --- |
 | PostgreSQL | 项目、任务、Agent 事件和 LangGraph checkpoint | `POSTGRES_*` |
-| Milvus | 代码、文档和历史修复案例的向量检索 | `MILVUS_URI`、`MILVUS_TOKEN`、`MILVUS_DATABASE` |
+| Milvus | 代码、文档和历史修复案例的向量检索 | `MILVUS_URI`、`MILVUS_USER`、`MILVUS_PASSWORD`、`MILVUS_DATABASE` |
 | Neo4j | 文件、类、方法、调用和测试依赖关系 | `NEO4J_URI`、`NEO4J_USER`、`NEO4J_PASSWORD` |
 
 这些不是 SaaS API Key，但需要虚拟机地址、端口和账号密码。Milvus 运行在用户虚拟机的 Docker 环境中，使用前必须先启动并完成健康检查。
+
+当前 PostgreSQL 使用 `192.168.74.180:5432/postgres`，开发阶段使用 `postgres` 用户，连接验证成功。正式部署前应切换为项目专用的最小权限用户。
+
+Neo4j 位于 `basenode` 虚拟机，Bolt 地址为 `bolt://basenode:7687`，Neo4j Browser 为 `http://basenode:7474`。7474 和 7687 均已从 Windows 验证可达，APOC 5.26.8 已安装，认证和代码图谱读写验证成功。
 
 ## Embedding 选择建议
 

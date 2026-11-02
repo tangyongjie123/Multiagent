@@ -4,14 +4,26 @@
 
 ## 项目状态
 
-当前处于基础设计与工程骨架阶段，已经完成：
+当前已经完成首个可运行的端到端版本：
 
 - 项目范围、功能需求和验收标准。
 - Python 3.11 Conda 虚拟环境与依赖记录。
-- DeepSeek、Embedding、PostgreSQL、Milvus 和 Neo4j 的安全配置模板。
+- DeepSeek、DashScope、Embedding、PostgreSQL、Milvus 和 Neo4j 的安全配置模板。
 - 开发过程 Token、模型价格和费用统计工具。
+- FastAPI 健康检查、项目接口、运行接口和 SSE 事件流。
+- PostgreSQL 异步数据层及项目、运行、事件、产物模型。
+- LangGraph PostgreSQL checkpoint。
+- PostgreSQL 数据库连接、建表和真实 API 持久化验证。
+- SSE 事件推送验证。
+- 主 Agent 集中调度六个专业 Agent 的 LangGraph 图。
+- DashScope `qwen3.8-flash` 对话接口和 `qwen3.7-text-embedding` 向量接口验证成功。
+- 当前 `/health` 中 PostgreSQL、checkpoint、Milvus、Chat 和 Embedding 均已通过。
+- Neo4j 认证、代码图谱约束和真实关系读写已验证通过。
+- 主 Agent 已真实调度 PM、Architect、Coder、Tester、Reviewer 和 Doc。
+- 生成工程已通过 Maven 测试和真实 CRUD 接口验收。
+- 已生成 README、中文使用手册、OpenAPI 和完整 Spring Boot 后端代码。
 
-后端 Agent、LangGraph 工作流、React 可视化界面和 Spring Boot 代码生成器将在后续阶段实现。
+React 可视化界面、Docker 沙箱、代码 Diff 和产物下载将在后续阶段实现。
 
 ## 目标能力
 
@@ -61,6 +73,18 @@ Copy-Item .env.example .env
 
 然后在 `.env` 中填写自己的密钥和数据库连接信息。`.env` 已被 `.gitignore` 排除，禁止提交。
 
+## 启动后端
+
+```powershell
+& 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m scripts.run_api
+```
+
+- 存活检查：`GET http://127.0.0.1:8000/health/live`
+- 依赖检查：`GET http://127.0.0.1:8000/health`
+- OpenAPI：`GET http://127.0.0.1:8000/docs`
+
+Windows 必须使用 `scripts.run_api` 启动，以确保 psycopg 的异步 checkpoint 运行在 Selector 事件循环中。
+
 ## 项目文档
 
 - [项目需求](docs/PROJECT_REQUIREMENTS.md)
@@ -68,6 +92,10 @@ Copy-Item .env.example .env
 - [环境变量与外部服务](docs/ENVIRONMENT_VARIABLES.md)
 - [模型价格](docs/MODEL_PRICING.md)
 - [开发 Token 与费用记录](docs/DEVELOPMENT_TOKEN_USAGE.md)
+- [数据库设计](docs/DATABASE.md)
+- [Neo4j 代码依赖图](docs/GRAPH_DATABASE.md)
+- [当前实现进度](docs/IMPLEMENTATION_STATUS.md)
+- [首次端到端运行报告](docs/RUN_REPORT_2026-11-02.md)
 
 ## 安全说明
 

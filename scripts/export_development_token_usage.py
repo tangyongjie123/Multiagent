@@ -65,6 +65,36 @@ def latest_session_file(sessions_root: Path) -> Path:
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
+def discover_project_sessions(sessions_root: Path, project_root: Path) -> list[Path]:
+    """查找至少有一个 turn_context 位于当前项目目录的会话。"""
+
+    if not sessions_root.exists():
+        return []
+
+    project_text = str(project_root.resolve()).replace("\\", "/").lower()
+    matched: list[Path] = []
+    for path in sessions_root.rglob("*.jsonl"):
+        if path.name.endswith(".bak"):
+            continue
+        try:
+            with path.open("r", encoding="utf-8") as source:
+                for line in source:
+                    if '"turn_context"' not in line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    payload = record.get("payload") or {}
+                    cwd = str(payload.get("cwd") or "").replace("\\", "/").lower()
+                    if cwd == project_text:
+                        matched.append(path)
+                        break
+        except OSError:
+            continue
+    return sorted(matched, key=lambda path: path.stat().st_mtime)
+
+
 def read_records(path: Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as source:
@@ -99,6 +129,19 @@ def normalize_label(text: str, limit: int = 88) -> str:
         pattern.search(cleaned) for pattern in SENSITIVE_VALUE_PATTERNS
     ):
         return "包含敏感信息的请求（已脱敏）"
+    if re.fullmatch(r"\d{6,}", cleaned) or (
+        re.fullmatch(r"[A-Za-z0-9_!@#$%^&*.-]{6,}", cleaned)
+        and any(char.isalpha() for char in cleaned)
+        and any(char.isdigit() for char in cleaned)
+    ):
+        return "包含敏感凭证的请求（已脱敏）"
+    if re.search(r"\d{6,}", cleaned):
+        return "包含敏感凭证的请求（已脱敏）"
+    for token in re.findall(r"[A-Za-z0-9_!@#$%^&*.-]{6,}", cleaned):
+        if any(char.isalpha() for char in token) and any(
+            char.isdigit() for char in token
+        ):
+            return "包含敏感凭证的请求（已脱敏）"
     cleaned = cleaned.replace("|", "\\|")
     if len(cleaned) <= limit:
         return cleaned
@@ -307,7 +350,11 @@ def collect_turns(
             for ordinal, text in user_messages
             if isinstance(current_ordinal, int) and current_ordinal <= ordinal < next_ordinal
         ]
-        label = normalize_label(matching_prompts[0]) if matching_prompts else "系统触发或未记录用户请求"
+        label = (
+            normalize_label(matching_prompts[0])
+            if matching_prompts
+            else "系统触发或未记录用户请求"
+        )
         usage_entry = latest_usage.get(turn_id)
         usage = usage_entry[1] if usage_entry else {}
         model = turn_models.get(turn_id, "未记录")
@@ -404,7 +451,6 @@ def render_markdown(
         f"| 输出 Token | {format_number(totals['output_tokens'])} |",
         f"| 推理输出 Token | {format_number(totals['reasoning_output_tokens'])} |",
         f"| 合计 Token | {format_number(totals['total_tokens'])} |",
-        f"| 当前线程累计 Token | {format_number(thread_usage.get('total_tokens'))} |",
         f"| 估算总费用 | {format_cost(total_cost, currency)} |",
         f"| 未配置价格的轮次 | {unpriced_turns} |",
         "",
@@ -415,8 +461,14 @@ def render_markdown(
         "",
         "## 每次开发任务",
         "",
-        "| 序号 | 开始时间 | 工作内容摘要 | 模型 | 输入 | 缓存输入 | 缓存写入 | 输出 | 推理输出 | 合计 | 计费时段 | 估算费用 | 状态 | Turn ID |",
-        "| ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | --- | --- |",
+        (
+            "| 序号 | 开始时间 | 工作内容摘要 | 模型 | 输入 | 缓存输入 | "
+            "缓存写入 | 输出 | 推理输出 | 合计 | 计费时段 | 估算费用 | 状态 | Turn ID |"
+        ),
+        (
+            "| ---: | --- | --- | --- | ---: | ---: | ---: | ---: | "
+            "---: | ---: | --- | ---: | --- | --- |"
+        ),
     ]
 
     for index, turn in enumerate(turns, start=1):
@@ -450,13 +502,22 @@ def render_markdown(
             "## 记录规则",
             "",
             "- 每轮数据取该 `turn_id` 下序数最大的 `turn_token_usage`，避免重复累计同一轮快照。",
-            "- 费用按每条模型响应的时间判断峰谷时段，并使用实际响应 usage 计算，避免用累计快照重复收费。",
+            (
+                "- 费用按每条模型响应的时间判断峰谷时段，并使用实际响应 usage 计算，"
+                "避免用累计快照重复收费。"
+            ),
             "- 缓存命中输入按缓存价格计费，其余输入按缓存未命中价格计费。",
             "- 推理输出 Token 已包含在输出 Token 中，不重复计费。",
             "- 中国法定节假日尚未接入价格配置，可能影响峰谷判断。",
             "- 在工作内容摘要中只保留用户请求开头，避免把完整对话和敏感内容复制到项目文档。",
-            "- 若 `task_complete` 尚未出现，该轮可能只包含生成文档前的快照；下次运行脚本会覆盖为完整数据。",
-            "- 开发过程 Token 与平台运行时生成代码的 Token 分开管理，后者应由平台运行记录和成本页面展示。",
+            (
+                "- 若 `task_complete` 尚未出现，该轮可能只包含生成文档前的快照；"
+                "下次运行脚本会覆盖为完整数据。"
+            ),
+            (
+                "- 开发过程 Token 与平台运行时生成代码的 Token 分开管理，"
+                "后者应由平台运行记录和成本页面展示。"
+            ),
             "",
             "## 更新命令",
             "",
@@ -483,12 +544,25 @@ def render_markdown(
 def main() -> None:
     args = parse_args()
     pricing = load_pricing(args.pricing_file)
-    session_files = args.session_file or [latest_session_file(args.sessions_root)]
-    records: list[dict[str, Any]] = []
-    for session_file in session_files:
-        records.extend(read_records(session_file))
+    session_files = args.session_file or discover_project_sessions(
+        args.sessions_root, PROJECT_ROOT
+    )
+    if not session_files:
+        session_files = [latest_session_file(args.sessions_root)]
 
-    turns, thread_usage = collect_turns(records, pricing)
+    turns_by_id: dict[str, dict[str, Any]] = {}
+    thread_usage: dict[str, Any] = {}
+    for session_file in session_files:
+        turns, current_thread_usage = collect_turns(
+            read_records(session_file),
+            pricing,
+        )
+        for turn in turns:
+            turns_by_id.setdefault(turn["turn_id"], turn)
+        if current_thread_usage:
+            thread_usage = current_thread_usage
+
+    turns = sorted(turns_by_id.values(), key=lambda turn: turn["started_at"])
     markdown = render_markdown(turns, thread_usage, session_files, pricing)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(markdown, encoding="utf-8")
