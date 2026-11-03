@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { AGENT_ORDER, AGENT_SHORT_LABELS } from "./agentMeta";
 import { api } from "./api";
+import { ExecutionDetails } from "./ExecutionDetails";
 import type {
   Analysis,
   AnalysisEvent,
@@ -12,25 +14,6 @@ import type {
   Severity,
 } from "./types";
 
-// Agent 展示顺序必须与后端 LangGraph 的主流程保持一致。
-const AGENT_ORDER = [
-  "main",
-  "repository",
-  "architecture",
-  "test",
-  "security",
-  "quality",
-  "report",
-];
-const AGENT_LABELS: Record<string, string> = {
-  main: "Main",
-  repository: "Repository",
-  architecture: "Architecture",
-  test: "Test",
-  security: "Security",
-  quality: "Quality",
-  report: "Report",
-};
 const TERMINAL = ["completed", "failed", "cancelled"];
 // SSE 只监听这些事件；历史事件仍通过 REST 一次性加载。
 const STREAM_EVENTS = [
@@ -121,6 +104,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [clock, setClock] = useState(Date.now());
+  const [showExecutionDetails, setShowExecutionDetails] = useState(false);
 
   const selectedRepository = useMemo(
     () => repositories.find((item) => item.id === selectedRepositoryId) ?? null,
@@ -536,7 +520,7 @@ export default function App() {
                       key={agent}
                     >
                       <span>{String(index).padStart(2, "0")}</span>
-                      <strong>{AGENT_LABELS[agent]}</strong>
+                      <strong>{AGENT_SHORT_LABELS[agent]}</strong>
                       <i />
                     </div>
                   );
@@ -750,28 +734,60 @@ export default function App() {
               )}
 
               {activeTab === "timeline" && (
-                <section className="tab-panel timeline">
-                  {/* 时间线保留真实 Agent、工具和系统事件顺序。 */}
-                  {events.map((event) => (
-                    <article key={event.id}>
-                      <span className="timeline-time">
-                        {analysis?.started_at
-                          ? `+${formatDuration(
-                              Date.parse(event.created_at) -
-                                Date.parse(analysis.started_at),
-                            )}`
-                          : "—"}
-                      </span>
-                      <i />
-                      <div>
-                        <div className="timeline-head">
-                          <strong>{AGENT_LABELS[event.agent] ?? event.agent}</strong>
-                          <code>{event.event_type}</code>
-                        </div>
-                        <p>{event.message}</p>
-                      </div>
-                    </article>
-                  ))}
+                <section className="tab-panel">
+                  <div className="execution-mode">
+                    <div>
+                      <strong>详细执行过程</strong>
+                      <small>
+                        展开查看每个 Agent、路由和 MCP 工具的可观测步骤
+                      </small>
+                    </div>
+                    <label className="switch-control">
+                      <input
+                        checked={showExecutionDetails}
+                        onChange={(event) =>
+                          setShowExecutionDetails(event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span />
+                      <b>{showExecutionDetails ? "已开启" : "已关闭"}</b>
+                    </label>
+                  </div>
+                  {showExecutionDetails ? (
+                    <ExecutionDetails
+                      analysisStatus={analysis?.status ?? "pending"}
+                      currentAgent={analysis?.current_agent ?? null}
+                      events={events}
+                      startedAt={analysis?.started_at ?? null}
+                    />
+                  ) : (
+                    <div className="timeline">
+                      {/* 简化时间线只保留事件顺序，详细数据由开关控制。 */}
+                      {events.map((event) => (
+                        <article key={event.id}>
+                          <span className="timeline-time">
+                            {analysis?.started_at
+                              ? `+${formatDuration(
+                                  Date.parse(event.created_at) -
+                                    Date.parse(analysis.started_at),
+                                )}`
+                              : "—"}
+                          </span>
+                          <i />
+                          <div>
+                            <div className="timeline-head">
+                              <strong>
+                                {AGENT_SHORT_LABELS[event.agent] ?? event.agent}
+                              </strong>
+                              <code>{event.event_type}</code>
+                            </div>
+                            <p>{event.message}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </section>
               )}
 

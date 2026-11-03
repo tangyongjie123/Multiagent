@@ -34,6 +34,7 @@ Git URL
 - 将仓库、分析状态、事件、问题和产物元数据持久化到 PostgreSQL。
 - 使用 PostgreSQL 保存 LangGraph checkpoint。
 - 通过 SSE 展示实时进度，并支持取消正在运行的分析。
+- 时间线页可开启详细模式，按 Agent 查看路由、MCP 工具参数、耗时和结果预览。
 - 在 React + TypeScript 控制台中查看问题、时间线、Markdown 报告和历史运行。
 - 使用严重级别环形图和分类条形图展示问题分布，并按架构、测试、安全、质量分组列出问题。
 - 生成自包含 HTML 图文报告，内嵌严重级别和分类 SVG 图表；Markdown 报告也包含内嵌图片。
