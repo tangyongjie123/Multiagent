@@ -18,6 +18,11 @@ flowchart LR
     L --> SE[Security Agent]
     L --> Q[Quality Agent]
     L --> RP[Report Agent]
+    AR <-->|MCP Streamable HTTP| MT[MCP 只读工具服务]
+    T <-->|MCP Streamable HTTP| MT
+    SE <-->|MCP Streamable HTTP| MT
+    Q <-->|MCP Streamable HTTP| MT
+    MT --> W
     S --> P[(PostgreSQL)]
     L --> C[(LangGraph Checkpoint)]
     AR --> M[OpenAI 兼容模型]
@@ -30,7 +35,8 @@ flowchart LR
 
 ```text
 React -> FastAPI -> Analysis Runner -> Git 浅克隆 -> 仓库扫描
-      -> LangGraph 主 Agent -> 六个专业 Agent -> PostgreSQL 产物与事件
+      -> LangGraph 主 Agent -> 六个专业 Agent
+      -> MCP Streamable HTTP 只读工具 -> PostgreSQL 产物与事件
 ```
 
 Milvus 和 Neo4j 已完成配置、健康检查与基础连接生命周期，但尚未接入分析主链路。
@@ -48,6 +54,9 @@ Milvus 和 Neo4j 已完成配置、健康检查与基础连接生命周期，但
 | `app/services/static_analysis.py` | 可复现的安全与质量规则 |
 | `app/services/analysis_runner.py` | 后台执行、取消、心跳、持久化和报告 |
 | `app/services/analysis_events.py` | 事件序号与数据库写入 |
+| `app/mcp/server.py` | 五个 MCP 只读工具、路径沙箱和脱敏 |
+| `app/mcp/client.py` | MCP Streamable HTTP 客户端 |
+| `app/agents/tools.py` | Agent 工具权限、LangChain 包装和工具事件 |
 | `app/db/` | SQLAlchemy 模型、连接池和建表 |
 | `app/graph/` | Neo4j 驱动、约束和健康检查 |
 | `app/core/` | 配置、日志和运行参数 |
@@ -61,6 +70,7 @@ sequenceDiagram
     participant Runner as Analysis Runner
     participant Git as Git
     participant Graph as LangGraph
+    participant MCP as MCP Tools
     participant DB as PostgreSQL
 
     UI->>API: POST /api/v1/repositories
@@ -73,6 +83,8 @@ sequenceDiagram
     Runner->>Runner: 扫描与确定性规则
     Runner->>DB: analyzing + repository.scanned
     Runner->>Graph: 执行分析状态图
+    Graph->>MCP: HTTP 调用只读工具
+    MCP-->>Graph: 脱敏的目录/文件/搜索/规则结果
     Graph->>Runner: Repository/Architecture/Test/Security/Quality/Report
     Runner->>DB: findings/artifacts/status/events
     Runner-->>UI: SSE 实时事件
@@ -130,8 +142,22 @@ stateDiagram-v2
 - SSE 按 `sequence` 追平数据库中的新事件。
 - 前端去重后按序号排序，避免重连时重复展示。
 - 页面只在运行状态下监听 SSE；历史停止时不再持续请求。
+- MCP 工具调用会生成 `tool.started`、`tool.completed` 或 `tool.failed` 事件。
 
-## 8. 数据边界
+## 8. MCP 工具层
+
+- 服务端点：`http://127.0.0.1:{APP_PORT}/mcp/`
+- 传输协议：MCP Streamable HTTP
+- 服务端：`mcp==2.3.0` 的 `MCPServer`
+- Agent 客户端：每个工具调用创建独立 MCP 会话
+- 工具权限按 Agent 角色限制
+- 工具路径只能位于 `workspaces/repositories/{analysis_id}`
+- 工具返回内容经过长度限制和敏感值脱敏
+- 单个 Agent 默认最多调用 3 次工具
+
+工具只读取克隆后的仓库，不执行构建、测试或目标仓库脚本。
+
+## 9. 数据边界
 
 | 存储 | 内容 |
 | --- | --- |
@@ -141,7 +167,7 @@ stateDiagram-v2
 | Milvus | 后续代码和文档向量检索 |
 | Neo4j | 后续代码实体和依赖关系 |
 
-## 9. 安全设计
+## 10. 安全设计
 
 - 只允许 HTTPS/HTTP 白名单主机。
 - 禁止 URL 内嵌认证信息。
@@ -149,8 +175,9 @@ stateDiagram-v2
 - 不使用审计命令污染目标仓库。
 - 限制仓库体积、文件数、源码摘要长度和克隆时间。
 - 错误响应只暴露异常类型，不返回密钥和数据库连接串。
+- MCP 不提供 Shell 和任意网络工具；默认客户端只访问本机端点，远程部署必须增加认证和网络隔离。
 
-## 10. 扩展点
+## 11. 扩展点
 
 - 在扫描后增加代码切块、Embedding 和 Milvus 检索。
 - 在 Architecture/Quality Agent 前注入历史代码和团队规范上下文。

@@ -24,6 +24,7 @@
 - 主 Agent 只能从 LangGraph 声明的合法动作中选择路由。
 - 主 Agent 负责汇总问题、去重、处理失败和决定结束状态。
 - 主 Agent 的每次路由、暂停和终止决策必须持久化。
+- 专业 Agent 可以通过受控 MCP 工具获取额外证据，但只能调用分配给自己且已声明的工具。
 
 ## 子 Agent 职责
 
@@ -35,6 +36,16 @@
 | Security Agent | 凭证、命令执行和基础安全风险检查 |
 | Quality Agent | 异常处理、可维护性、输入校验、并发和明显缺陷分析 |
 | Report Agent | 将证据、严重级别和建议汇总为中文 Markdown 报告 |
+
+## MCP 工具约束
+
+- MCP 使用 Streamable HTTP，端点默认挂载在 `/mcp/`。
+- Agent 只能使用只读工具：目录、文件、代码搜索、相关测试和确定性规则。
+- 工具必须校验路径，禁止访问分析工作区之外的文件和软链接目标。
+- 工具返回值必须限制长度，并对密码、Token、密钥和私钥进行脱敏。
+- 不得提供任意 Shell、任意网络请求或目标仓库写操作工具。
+- 每个 Agent 默认最多调用 3 次 MCP 工具，最多进行 3 轮工具推理。
+- `tool.started`、`tool.completed` 和 `tool.failed` 必须持久化并显示在前端。
 
 ## MVP 工作流
 
@@ -57,6 +68,7 @@ Git URL
 - Python 3.11.18。
 - FastAPI、Uvicorn、Pydantic v2。
 - LangGraph。
+- MCP Python SDK，使用 Streamable HTTP。
 - React 19、TypeScript、Vite。
 - PostgreSQL。
 - Milvus。
@@ -86,6 +98,7 @@ Git URL
 
 - React 控制台用于提交仓库、查看分析历史和实时进度。
 - 使用 SSE 接收 Agent 事件，不使用高频轮询。
+- 时间线必须显示 MCP 工具调用、耗时和失败状态。
 - 问题必须显示严重级别、分类、文件位置、证据、影响和修复建议。
 - 报告支持在线查看和 Markdown 下载。
 - 默认中文界面。

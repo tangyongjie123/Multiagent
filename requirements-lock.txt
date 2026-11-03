@@ -1,4 +1,4 @@
-# 当前 Conda 环境的完整冻结结果，生成日期：2026-11-02
+# 当前 Conda 环境的完整冻结结果，生成日期：2026-11-03
 # 该环境同时包含原有 GUI 工具，因此不是最小依赖集。
 # 全新环境请优先使用 requirements.txt 和 requirements-dev.txt。
 
@@ -9,13 +9,16 @@ annotated-types==0.8.0
 anyio==4.16.0
 ast_serialize==0.13.1
 asyncpg==0.32.0
+attrs==26.1.0
 cachetools==7.2.8
 certifi==2026.10.23
+cffi==2.1.1
 cfgv==3.5.0
 charset-normalizer==3.5.2
 click==8.5.0
 colorama==0.4.6
 coverage==7.17.0
+cryptography==50.0.2
 distlib==0.4.4
 distro==1.9.0
 docker==7.2.0
@@ -36,6 +39,8 @@ idna==3.20
 iniconfig==2.3.1
 Jinja2==3.1.6
 jiter==0.18.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
 jsonpatch==1.39
 jsonpointer==3.7
 keyboard==0.13.5
@@ -53,6 +58,8 @@ langsmith==0.14.17
 librt==0.16.0
 Mako==1.4.3
 MarkupSafe==3.0.4
+mcp==2.3.0
+mcp-types==2.3.0
 MouseInfo==0.1.3
 mypy==2.4.1
 mypy_extensions==1.1.0
@@ -78,8 +85,10 @@ PyAutoGUI==0.9.54
 pydantic==2.14.2
 pydantic-settings==2.16.2
 pydantic_core==2.50.2
+pycparser==3.12
 PyGetWindow==0.0.9
 Pygments==2.21.0
+PyJWT==2.15.1
 pymilvus==3.0.2
 PyMsgBox==2.0.1
 pyperclip==1.11.0
@@ -97,9 +106,11 @@ pytz==2026.6
 pywin32==312
 PyYAML==6.0.3
 redis==8.1.0
+referencing==0.37.0
 regex==2026.9.29
 requests==2.34.2
 requests-toolbelt==1.0.0
+rpds-py==2026.9.1
 ruff==0.17.3
 smmap==5.0.3
 sniffio==1.3.1

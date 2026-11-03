@@ -18,7 +18,7 @@ Git URL
   -> PostgreSQL 问题记录 + Markdown 报告
 ```
 
-每次 Agent 路由、失败、完成和取消状态都会写入事件表，并通过 SSE 实时推送到前端。
+专业 Agent 通过 MCP Streamable HTTP 读取仓库目录、文件和搜索证据。每次 Agent 路由、MCP 工具调用、失败、完成和取消状态都会写入事件表，并通过 SSE 实时推送到前端。
 
 ## 已实现能力
 
@@ -27,6 +27,9 @@ Git URL
 - 扫描文件数量、体积、语言、构建文件、测试文件、入口类与 Spring Boot 标识。
 - 使用确定性规则检查疑似凭证、私钥、系统命令执行、空异常块、标准输出日志和 TODO/FIXME。
 - 使用 LangGraph 实现主 Agent 到六个专业 Agent 的显式状态流转。
+- 在 FastAPI 内挂载真实的 MCP Streamable HTTP 服务。
+- 提供 `list_repository_tree`、`read_repository_file`、`search_repository_code`、`find_related_tests` 和 `run_static_rules` 五个只读工具。
+- Architecture 和 Quality Agent 可自主调用 LangChain 工具，Test 和 Security Agent 通过 MCP 执行确定性能力。
 - 使用结构化输出约束 Architecture 和 Quality Agent 的问题格式。
 - 将仓库、分析状态、事件、问题和产物元数据持久化到 PostgreSQL。
 - 使用 PostgreSQL 保存 LangGraph checkpoint。
@@ -39,7 +42,7 @@ Git URL
 | 层 | 技术 |
 | --- | --- |
 | API | FastAPI、Pydantic v2、Uvicorn |
-| Agent 编排 | LangGraph、LangChain、OpenAI 兼容模型接口 |
+| Agent 编排 | LangGraph、LangChain、MCP、OpenAI 兼容模型接口 |
 | 数据 | PostgreSQL、SQLAlchemy、asyncpg、psycopg |
 | 前端 | React 19、TypeScript、Vite |
 | 外部服务 | Milvus、Neo4j、DashScope/DeepSeek |
@@ -106,6 +109,7 @@ app/
   db/             PostgreSQL ORM 与会话
   domain/         领域枚举和实体
   graph/          Neo4j 连接与约束
+  mcp/            MCP Streamable HTTP 工具服务与客户端
   services/       仓库克隆、静态规则、分析执行和事件
 docs/
   ARCHITECTURE.md            系统架构与执行流程
@@ -127,6 +131,7 @@ tests/          Python 自动化测试
 - [项目需求](docs/PROJECT_REQUIREMENTS.md)
 - [系统架构](docs/ARCHITECTURE.md)
 - [分析模型](docs/ANALYSIS_MODEL.md)
+- [MCP 工具](docs/MCP_TOOLS.md)
 - [依赖与运行环境](docs/DEPENDENCIES.md)
 - [环境变量](docs/ENVIRONMENT_VARIABLES.md)
 - [PostgreSQL 设计](docs/DATABASE.md)
@@ -140,5 +145,6 @@ tests/          Python 自动化测试
 - Git URL 禁止携带用户名或密码，并通过 `GIT_ALLOWED_HOSTS` 限制允许的站点。
 - 限制仓库大小、文件数量和克隆超时。
 - 不运行被审查仓库中的任何代码或命令。
+- MCP 只提供只读工具，文件路径被限制在对应分析工作区，返回值自动脱敏。
 - 分析产物只写入 `workspaces/repositories/{analysis_id}`。
 - 使用手册中曾公开出现过的密钥应立即撤销并轮换。

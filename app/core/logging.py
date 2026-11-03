@@ -14,8 +14,8 @@ def configure_logging(level: str) -> None:
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(message)s",
     )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    for noisy_logger in ("httpx", "httpcore", "httpx2", "httpcore2", "mcp"):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,

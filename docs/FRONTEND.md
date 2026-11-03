@@ -94,6 +94,7 @@ npm run build
 
 - 按事件序号展示真实运行事件。
 - 显示相对开始时间、Agent、事件类型和中文消息。
+- 展示 `tool.started`、`tool.completed` 和 `tool.failed` MCP 工具事件。
 - 使用 SSE 增量更新，不进行高频状态轮询。
 
 ### 报告

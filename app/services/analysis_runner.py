@@ -222,6 +222,7 @@ async def _run_analysis(analysis_id: UUID) -> None:
         executor = RepositoryAnalysisExecutor(
             snapshot=snapshot,
             repository_name=repo_name,
+            analysis_id=str(analysis_id),
             event_emitter=emitter,
         )
         graph = build_analysis_graph(executor, get_checkpointer())

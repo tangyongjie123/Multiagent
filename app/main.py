@@ -19,7 +19,10 @@ from app.db.session import (
     initialize_database,
 )
 from app.graph.neo4j import close_neo4j, initialize_neo4j
+from app.mcp.server import create_mcp_http_app, mcp_server
 from app.services.analysis_runner import recover_interrupted_analyses
+
+mcp_http_app = create_mcp_http_app()
 
 
 @asynccontextmanager
@@ -35,7 +38,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await initialize_checkpointer()
     with suppress(Exception):
         await initialize_neo4j()
-    yield
+    async with mcp_server.session_manager.run():
+        yield
     await close_neo4j()
     await close_checkpointer()
     await close_database()
@@ -58,6 +62,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     application.include_router(api_router)
+    application.mount("/mcp", mcp_http_app)
 
     @application.exception_handler(DatabaseUnavailableError)
     async def database_unavailable_handler(

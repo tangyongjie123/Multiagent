@@ -45,6 +45,7 @@ cd E:\Aipracite\py_workspace\Multiagent
 | langgraph | 1.2.19 | 主 Agent 状态图 |
 | langgraph-checkpoint-postgres | 3.2.0 | PostgreSQL checkpoint |
 | langchain-openai | 1.7.3 | OpenAI 兼容 Chat API |
+| mcp | 2.3.0 | MCP 服务端、Streamable HTTP 客户端与工具协议 |
 | pymilvus | 3.0.2 | Milvus 客户端 |
 | neo4j | 6.4.1 | Neo4j 异步驱动 |
 | sqlalchemy[asyncio] | 2.1.6 | PostgreSQL ORM |
@@ -91,6 +92,7 @@ npm run build
 - Git：用于浅克隆公开仓库，需要可从终端直接执行 `git`。
 - Docker：可选，用于本地启动 PostgreSQL；也可以使用已有 PostgreSQL。
 - Milvus 与 Neo4j：可选，运行在用户维护的虚拟机或 Docker 环境中。
+- MCP 工具服务：随 FastAPI 进程启动，默认地址为 `http://127.0.0.1:8000/mcp/`。
 
 ## 7. 验证
 

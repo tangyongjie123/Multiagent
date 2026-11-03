@@ -37,6 +37,9 @@ const STREAM_EVENTS = [
   "agent.started",
   "agent.completed",
   "agent.failed",
+  "tool.started",
+  "tool.completed",
+  "tool.failed",
   "analysis.completed",
   "analysis.failed",
   "analysis.cancelled",
@@ -575,7 +578,7 @@ export default function App() {
               <span className="landing-number">01—06</span>
               <h1>Read the repository.<br />Find what matters.</h1>
               <p>
-                输入一个公开 Git 仓库地址。六个 Agent 将从结构、架构、测试、安全和质量方向依次形成证据，并由主 Agent 汇总为可下载审查报告。
+                输入一个公开 Git 仓库地址。六个 Agent 将通过 MCP 只读工具从结构、架构、测试、安全和质量方向依次形成证据，并由主 Agent 汇总为可下载审查报告。
               </p>
             </div>
           )}

@@ -17,6 +17,10 @@
 | `AUTO_CREATE_TABLES` | `true` | 开发环境自动建表；生产建议关闭 |
 | `CHAT_REQUEST_TIMEOUT_SECONDS` | `120` | 单次模型请求超时，范围 10 至 600 秒 |
 | `ANALYSIS_TOKEN_BUDGET` | `120000` | 单次分析输入与输出 Token 上限 |
+| `MCP_TOOL_URL` | 自动使用 `http://127.0.0.1:{APP_PORT}/mcp/` | Agent 调用 MCP 工具的 Streamable HTTP 地址 |
+| `MCP_TOOL_TIMEOUT_SECONDS` | `20` | 单次 MCP 工具调用超时 |
+| `AGENT_MAX_TOOL_CALLS` | `3` | 单个 Agent 最大 MCP 工具调用次数 |
+| `AGENT_MAX_TOOL_ROUNDS` | `3` | 最大工具推理轮数 |
 
 ## 2. Git 仓库访问
 
@@ -53,6 +57,19 @@ DASHSCOPE_CHAT_MODEL=replace-with-chat-model
 ```
 
 只配置当前使用的供应商即可。模型 Key 只用于平台自身推理，不发送到被审查仓库。
+
+## 3.1 MCP 工具服务
+
+```dotenv
+MCP_TOOL_URL=http://127.0.0.1:8000/mcp/
+MCP_TOOL_TIMEOUT_SECONDS=20
+AGENT_MAX_TOOL_CALLS=3
+AGENT_MAX_TOOL_ROUNDS=3
+```
+
+MCP 服务默认挂载到 FastAPI 的 `/mcp/` 路径，不需要单独端口。修改 `APP_PORT` 后，如果显式设置了 `MCP_TOOL_URL`，必须同步修改该地址。
+
+当前 MCP 端点没有单独的远程认证，只适合本机开发。部署到不可信网络前必须增加认证、授权和网络访问控制。
 
 ## 4. Embedding
 

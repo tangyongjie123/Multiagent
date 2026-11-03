@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     git_analysis_max_files: int = Field(default=80, ge=10, le=500)
     git_analysis_max_file_chars: int = Field(default=20_000, ge=1_000)
 
+    mcp_tool_url: str | None = None
+    mcp_tool_timeout_seconds: int = Field(default=20, ge=1, le=120)
+    agent_max_tool_calls: int = Field(default=3, ge=1, le=30)
+    agent_max_tool_rounds: int = Field(default=3, ge=1, le=10)
+
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"
@@ -92,6 +97,12 @@ class Settings(BaseSettings):
             for host in self.git_allowed_hosts.split(",")
             if host.strip()
         }
+
+    @property
+    def effective_mcp_tool_url(self) -> str:
+        if self.mcp_tool_url and "replace-with" not in self.mcp_tool_url:
+            return self.mcp_tool_url
+        return f"http://127.0.0.1:{self.app_port}/mcp/"
 
     @property
     def deepseek_configured(self) -> bool:

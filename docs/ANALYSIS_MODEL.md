@@ -7,6 +7,7 @@
 - 所有请求先进入主 Agent。
 - 主 Agent 负责选择、汇总、失败判断和终止。
 - 每个专业 Agent 只处理一项明确职责。
+- 专业 Agent 可以通过受控 MCP 工具获取额外代码证据。
 - 确定性规则优先，模型推理补充需要语义判断的部分。
 - 每条问题必须包含可检查的证据。
 - 分析过程不执行目标仓库代码。
@@ -41,7 +42,9 @@ fail
 
 ### Architecture Agent
 
-输入：仓库扫描摘要与最多 12 个源码摘要。
+输入：仓库扫描摘要与最多 10 个源码摘要。
+
+可用 MCP 工具：目录、文件读取和代码搜索。
 
 输出 Schema：`ArchitectureInsight`
 
@@ -72,7 +75,7 @@ fail
 
 输出：测试文件列表、框架线索、是否执行测试、测试缺口问题。
 
-该 MVP 不运行测试，因此不得宣称测试通过。
+该 Agent 通过 `find_related_tests` MCP 工具查找入口类相关测试。该 MVP 不运行测试，因此不得宣称测试通过。
 
 ### Security Agent
 
@@ -83,11 +86,15 @@ fail
 - 疑似 API Key、Token、密码和私钥。
 - `Runtime.getRuntime().exec` 与 `new ProcessBuilder(`。
 
+该 Agent 通过 `run_static_rules` MCP 工具执行规则。
+
 ### Quality Agent
 
-输入：确定性质量问题和最多 20 个源码摘要。
+输入：确定性质量问题和最多 8 个源码摘要。
 
 输出 Schema：`QualityReview`。模型结果与确定性结果合并，并由主 Agent 最终去重。
+
+可用 MCP 工具：确定性规则、文件读取和代码搜索。
 
 当前确定性规则包括：
 
@@ -144,7 +151,28 @@ Finding
 - 严重级别和问题分类必须来自枚举。
 - JSON 解析失败、超时或鉴权失败都会使当前 Agent 失败。
 
-## 6. 可复现性与限制
+## 6. MCP 工具调用循环
+
+```text
+模型提出 tool_calls
+→ 校验 Agent 是否拥有该工具权限
+→ 通过 MCP Streamable HTTP 调用
+→ 记录 tool.started
+→ 执行路径沙箱、长度限制和脱敏
+→ 记录 tool.completed 或 tool.failed
+→ 通过 ToolMessage 返回模型
+→ 模型生成最终结构化结果
+```
+
+控制策略：
+
+- 单个 Agent 默认最多 3 次工具调用。
+- 默认最多 3 轮工具推理。
+- 预算用完后强制模型不再调用工具，基于已有证据生成最终 JSON。
+- 未授权工具和非法参数会终止当前 Agent。
+- 工具结果不执行目标仓库代码。
+
+## 7. 可复现性与限制
 
 确定性规则结果在相同源码输入下可复现。LLM 结果受模型版本、采样和供应商实现影响，因此报告不能等同于正式安全审计。
 
