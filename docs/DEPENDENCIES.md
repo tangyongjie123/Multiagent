@@ -44,6 +44,7 @@ cd E:\Aipracite\py_workspace\Multiagent
 | httpx | 0.28.1 | 外部服务健康检查 |
 | langgraph | 1.2.19 | 主 Agent 状态图 |
 | langgraph-checkpoint-postgres | 3.2.0 | PostgreSQL checkpoint |
+| langchain-core | 1.7.3 | 消息、工具和结构化模型调用的直接依赖 |
 | langchain-openai | 1.7.3 | OpenAI 兼容 Chat API |
 | mcp | 2.3.0 | MCP 服务端、Streamable HTTP 客户端与工具协议 |
 | pymilvus | 3.0.2 | Milvus 客户端 |
@@ -95,7 +96,21 @@ npm run build
 - Milvus 与 Neo4j：可选，运行在用户维护的虚拟机或 Docker 环境中。
 - MCP 工具服务：随 FastAPI 进程启动，默认地址为 `http://127.0.0.1:8000/mcp/`。
 
-## 7. 验证
+## 7. 后续聊天 Agent 扩展
+
+当前依赖已经覆盖聊天和多 Agent 扩展所需能力：
+
+- FastAPI 与 SSE：聊天 REST API 和流式回答。
+- LangGraph：主 Agent 模式路由和多 Agent 状态。
+- LangChain Core/OpenAI：消息、工具调用、结构化输出和聊天模型。
+- MCP：受控证据工具。
+- PostgreSQL：会话、消息、引用和分析状态。
+- Milvus：代码块和历史问题向量检索。
+- Neo4j：文件、类、方法和依赖关系查询。
+
+因此聊天版 MVP 不需要提前加入未使用的聊天 UI 或额外向量数据库 SDK；只有实际接入新能力时才增加对应依赖。
+
+## 8. 验证
 
 ```powershell
 & 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m pip check
