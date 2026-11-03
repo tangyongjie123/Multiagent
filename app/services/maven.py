@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,25 +27,34 @@ async def run_maven_tests(workspace: Path) -> MavenTestResult:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     command = ["cmd.exe", "/d", "/c", "mvn", "-B", "test"]
 
-    def execute() -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            command,
+    if sys.platform == "win32":
+        process = await asyncio.create_subprocess_exec(
+            *command,
             cwd=workspace,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=300,
-            check=False,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    else:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            cwd=workspace,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
         )
 
     try:
-        completed = await asyncio.to_thread(execute)
-        output = f"{completed.stdout}\n{completed.stderr}".strip()
-        exit_code = completed.returncode
-    except subprocess.TimeoutExpired as exc:
-        output = f"Maven 测试超时: {exc}"
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=300)
+        output = stdout.decode("utf-8", errors="replace").strip()
+        exit_code = process.returncode or 0
+    except TimeoutError:
+        await _stop_process_tree(process)
+        output = "Maven 测试超时"
         exit_code = -1
+    except asyncio.CancelledError:
+        await _stop_process_tree(process)
+        log_path.write_text("运行已取消，Maven 子进程已终止", encoding="utf-8")
+        raise
 
     log_path.write_text(output, encoding="utf-8")
     return MavenTestResult(
@@ -54,3 +64,29 @@ async def run_maven_tests(workspace: Path) -> MavenTestResult:
         output=output[-20_000:],
         log_path=str(log_path),
     )
+
+
+async def _stop_process_tree(process: asyncio.subprocess.Process) -> None:
+    """终止 Maven 及其子 Java 进程。"""
+
+    if process.returncode is not None:
+        return
+    if sys.platform == "win32":
+        killer = await asyncio.create_subprocess_exec(
+            "taskkill",
+            "/PID",
+            str(process.pid),
+            "/T",
+            "/F",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        await killer.wait()
+    else:
+        process.terminate()
+    try:
+        await asyncio.wait_for(process.wait(), timeout=10)
+    except TimeoutError:
+        process.kill()
+        await process.wait()

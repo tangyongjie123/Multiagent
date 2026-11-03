@@ -40,10 +40,20 @@
 - SSE 接口已返回 `run.created` 事件。
 - LangGraph checkpoint 已自动创建 PostgreSQL 表，并实际保存六 Agent 测试工作流状态。
 - 增加 Windows 兼容启动器 `scripts/run_api.py`，修复 Uvicorn 默认 Proactor 事件循环导致的 checkpoint 初始化失败。
+- 增加根目录 `main.py` 快捷入口，激活环境后可直接执行 `python main.py`。
 - 使用兼容启动器后，`/health` 中 PostgreSQL 和 checkpoint 均为 `ok`。
 - 完成端到端运行 `c693c7d0-765f-44f3-80f5-36f593a1e042`，六个 Agent 全部完成。
 - 生成工程通过真实 `mvn -B test`，4 个 JUnit 测试全部通过。
 - 生成服务通过真实 HTTP CRUD 验收，并生成 README、中文使用手册和 OpenAPI。
+- 增加生成工程文件树、单文件读取、Diff 和 ZIP 下载接口。
+- 增加 React + TypeScript 可视化控制台，支持项目创建、运行历史、SSE 时间线、文件浏览、Diff 和下载。
+- 前端实时显示整体运行耗时和每条事件的相对时间。
+- 前端支持停止运行；后端取消任务时会终止当前模型请求或 Maven 进程树。
+- 已完成真实取消验证：运行在 PM 阶段被取消，最终状态为 `cancelled`，未继续产生 Agent 完成事件。
+- 增加 `python dev.py` 一键启动前后端开发服务器。
+- Coder 改为领域层与 Web 层两阶段生成，支持动态包名。
+- Tester 升级为完整 CRUD、400、404、409 契约测试。
+- 运行增加 Worker ID 和心跳，防止多个后端实例误将活跃运行标记为中断。
 
 ### 外部服务
 
@@ -67,19 +77,20 @@
 
 ```text
 Ruff: All checks passed
-mypy: Success: no issues found in 35 source files
-pytest: 7 passed
+mypy: Success: no issues found in 37 source files
+pytest: 9 passed
 checkpoint verification: checkpoint_created=True, completed_agents=6
 generated project: 4 JUnit tests passed
+frontend production build: success
 ```
 
 ## 尚未完成
 
 - Spring Boot 代码生成沙箱尚未实现。
-- React 可视化界面尚未创建。
 - 生成工程尚未包含 Maven Wrapper。
 - Tester 当前采用契约级集成测试，尚未覆盖每个 Service 分支。
-- 产物下载、ZIP 打包和代码 Diff 页面尚未实现。
+- 前端尚未实现预算确认和人工审批按钮。
+- 前端尚未可视化 Milvus 检索结果和 Neo4j 依赖图。
 
 ## 当前需要外部配置
 
@@ -95,5 +106,5 @@ PostgreSQL 运行在 `192.168.74.180:5432`，本机 `localhost:5432` 未监听�
 1. 增加 Alembic 初始迁移。
 2. 将生成执行迁移到 Docker 沙箱并生成 Maven Wrapper。
 3. 初始化 Milvus 的 `code_chunks` 与 `knowledge_chunks` 集合。
-4. 增加产物 ZIP 下载、代码树和 Diff 接口。
-5. 创建 React 可视化界面。
+4. 将 React 构建产物纳入部署流程。
+5. 增加预算确认和人工审批交互。

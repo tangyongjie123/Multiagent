@@ -85,6 +85,31 @@ class ArtifactResponse(BaseModel):
     created_at: datetime
 
 
+class FileEntry(BaseModel):
+    """生成工程文件树节点。"""
+
+    path: str
+    size: int
+
+
+class FileListResponse(BaseModel):
+    """生成工程文件列表。"""
+
+    run_id: UUID
+    files: list[FileEntry]
+    file_count: int
+    total_size: int
+
+
+class DiffResponse(BaseModel):
+    """生成工程相对空基线的初始 Diff。"""
+
+    run_id: UUID
+    additions: int
+    deletions: int
+    patch: str
+
+
 class HealthComponent(BaseModel):
     """单个依赖服务的健康状态。"""
 

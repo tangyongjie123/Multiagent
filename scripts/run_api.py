@@ -26,6 +26,7 @@ def main() -> None:
         host=settings.app_host,
         port=settings.app_port,
         loop="scripts.run_api:selector_event_loop",
+        access_log=settings.uvicorn_access_log,
     )
 
 

@@ -224,6 +224,8 @@ __marimo__/
 !.env.example
 .idea/
 .vscode/
+node_modules/
+frontend/dist/
 generated/
 workspaces/
 logs/

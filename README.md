@@ -22,8 +22,10 @@
 - 主 Agent 已真实调度 PM、Architect、Coder、Tester、Reviewer 和 Doc。
 - 生成工程已通过 Maven 测试和真实 CRUD 接口验收。
 - 已生成 README、中文使用手册、OpenAPI 和完整 Spring Boot 后端代码。
+- 提供生成工程文件树、内容查看、Diff 和 ZIP 下载接口。
+- React + TypeScript 可视化控制台已可运行。
 
-React 可视化界面、Docker 沙箱、代码 Diff 和产物下载将在后续阶段实现。
+Docker 沙箱、人工审批交互和 Milvus/Neo4j 可视化将在后续阶段实现。
 
 ## 目标能力
 
@@ -75,6 +77,25 @@ Copy-Item .env.example .env
 
 ## 启动后端
 
+激活 Conda 环境后，可以直接运行：
+
+```powershell
+python main.py
+```
+
+同时启动后端和前端：
+
+```powershell
+cd frontend
+npm install
+cd ..
+python dev.py
+```
+
+访问 `http://127.0.0.1:5173`，停止时按 `Ctrl+C`。
+
+完整启动命令：
+
 ```powershell
 & 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m scripts.run_api
 ```
@@ -96,6 +117,9 @@ Windows 必须使用 `scripts.run_api` 启动，以确保 psycopg 的异步 chec
 - [Neo4j 代码依赖图](docs/GRAPH_DATABASE.md)
 - [当前实现进度](docs/IMPLEMENTATION_STATUS.md)
 - [首次端到端运行报告](docs/RUN_REPORT_2026-11-02.md)
+- [前端运行说明](docs/FRONTEND.md)
+- [故障排查与修复记录](docs/TROUBLESHOOTING.md)
+- [项目文件与代码说明](docs/PROJECT_FILE_GUIDE.md)
 
 ## 安全说明
 

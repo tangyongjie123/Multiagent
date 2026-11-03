@@ -63,20 +63,6 @@ POM_XML = """\
 </project>
 """
 
-APPLICATION_JAVA = """\
-package com.example.task;
-
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-
-@SpringBootApplication
-public class TaskApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(TaskApplication.class, args);
-    }
-}
-"""
-
 APPLICATION_YML = """\
 spring:
   application:
@@ -119,15 +105,36 @@ class WorkspaceManager:
         self.root.mkdir(parents=True, exist_ok=True)
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
         self._write_text("pom.xml", POM_XML)
-        self._write_text(
-            "src/main/java/com/example/task/TaskApplication.java",
-            APPLICATION_JAVA,
-        )
         self._write_text("src/main/resources/application.yml", APPLICATION_YML)
         self._write_text(
             "src/main/resources/application-demo.yml",
             APPLICATION_DEMO_YML,
         )
+
+    def write_application(self, package_name: str) -> str:
+        """按架构包名写入 Spring Boot 启动类。"""
+
+        if not package_name or any(
+            not part.isidentifier() for part in package_name.split(".")
+        ):
+            raise WorkspaceError(f"非法 Java 包名: {package_name}")
+        package_path = package_name.replace(".", "/")
+        relative_path = f"src/main/java/{package_path}/MultiAgentApplication.java"
+        source = f"""\
+package {package_name};
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class MultiAgentApplication {{
+    public static void main(String[] args) {{
+        SpringApplication.run(MultiAgentApplication.class, args);
+    }}
+}}
+"""
+        self._write_text(relative_path, source)
+        return relative_path
 
     def write_generated_files(
         self,

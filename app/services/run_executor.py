@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.checkpoint import get_checkpointer
@@ -21,13 +22,29 @@ from app.domain.models import AgentRole, RunStatus
 from app.services.run_events import append_event
 from app.services.workspace import WorkspaceManager
 
+WORKER_ID = uuid4().hex
+HEARTBEAT_INTERVAL_SECONDS = 15
+STALE_AFTER_SECONDS = 60
+_HEARTBEAT_TASKS: set[asyncio.Task[None]] = set()
+_RUNNING_TASKS: dict[UUID, asyncio.Task[None]] = {}
+
 
 async def recover_interrupted_runs() -> None:
-    """把上次进程退出时仍处于 running 的运行标记为中断。"""
+    """把心跳超时的 running 运行标记为中断。"""
 
+    cutoff = datetime.now(UTC) - timedelta(seconds=STALE_AFTER_SECONDS)
     async with get_session_factory()() as session:
         runs = await session.scalars(
-            select(RunRecord).where(RunRecord.status == RunStatus.RUNNING.value)
+            select(RunRecord).where(
+                and_(
+                    RunRecord.status == RunStatus.RUNNING.value,
+                    or_(
+                        RunRecord.heartbeat_at.is_(None),
+                        RunRecord.heartbeat_at < cutoff,
+                    ),
+                    RunRecord.started_at < cutoff,
+                )
+            )
         )
         for run in runs.all():
             run.status = RunStatus.FAILED.value
@@ -42,6 +59,19 @@ async def recover_interrupted_runs() -> None:
                 {},
             )
         await session.commit()
+
+
+async def _heartbeat_loop(run_id: UUID) -> None:
+    """定期更新运行心跳，供启动恢复判断 Worker 是否仍存活。"""
+
+    while True:
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
+        async with get_session_factory()() as session:
+            run = await session.get(RunRecord, run_id)
+            if run is None or run.status != RunStatus.RUNNING.value:
+                return
+            run.heartbeat_at = datetime.now(UTC)
+            await session.commit()
 
 
 async def _emit_event(
@@ -98,7 +128,55 @@ async def _persist_result_artifacts(
     )
 
 
+async def _mark_cancelled(run_id: UUID) -> None:
+    """幂等地把运行标记为已取消。"""
+
+    async with get_session_factory()() as session:
+        run = await session.get(RunRecord, run_id)
+        if run is None or run.status in {
+            RunStatus.COMPLETED.value,
+            RunStatus.FAILED.value,
+            RunStatus.CANCELLED.value,
+        }:
+            return
+        run.status = RunStatus.CANCELLED.value
+        run.error_message = "用户取消"
+        run.completed_at = datetime.now(UTC)
+        await append_event(
+            session,
+            run_id,
+            "run.cancelled",
+            AgentRole.MAIN,
+            "运行已由用户取消",
+            {},
+        )
+        await session.commit()
+
+
+async def cancel_run(run_id: UUID) -> None:
+    """取消正在执行的 Agent 后台任务。"""
+
+    await _mark_cancelled(run_id)
+    task = _RUNNING_TASKS.get(run_id)
+    if task is not None and not task.done():
+        task.cancel()
+
+
 async def execute_run(run_id: UUID) -> None:
+    """登记后台任务并处理取消。"""
+
+    task = asyncio.current_task()
+    if task is not None:
+        _RUNNING_TASKS[run_id] = task
+    try:
+        await _execute_run(run_id)
+    except asyncio.CancelledError:
+        await _mark_cancelled(run_id)
+    finally:
+        _RUNNING_TASKS.pop(run_id, None)
+
+
+async def _execute_run(run_id: UUID) -> None:
     """后台执行主 Agent 工作流并持久化状态、事件和产物。"""
 
     settings = get_settings()
@@ -107,12 +185,16 @@ async def execute_run(run_id: UUID) -> None:
         run = await session.get(RunRecord, run_id)
         if run is None:
             return
+        if run.status == RunStatus.CANCELLED.value:
+            return
         project = await session.get(ProjectRecord, run.project_id)
         if project is None:
             return
         requirement = project.requirement
         run.status = RunStatus.RUNNING.value
+        run.worker_id = WORKER_ID
         run.started_at = datetime.now(UTC)
+        run.heartbeat_at = run.started_at
         await append_event(
             session,
             run.id,
@@ -123,6 +205,9 @@ async def execute_run(run_id: UUID) -> None:
         )
         await session.commit()
 
+    heartbeat_task = asyncio.create_task(_heartbeat_loop(run_id))
+    _HEARTBEAT_TASKS.add(heartbeat_task)
+    heartbeat_task.add_done_callback(_HEARTBEAT_TASKS.discard)
     workspace = WorkspaceManager(str(run_id))
     workspace.initialize()
 

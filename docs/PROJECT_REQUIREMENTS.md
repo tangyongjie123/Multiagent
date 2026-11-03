@@ -283,6 +283,10 @@ MVP 至少提供以下接口，统一使用 `/api/v1` 前缀：
 | POST | `/api/v1/runs/{run_id}/cancel` | 取消运行 |
 | GET | `/api/v1/runs/{run_id}/artifacts` | 获取产物列表 |
 | GET | `/api/v1/runs/{run_id}/graph` | 获取 Agent 与任务图 |
+| GET | `/api/v1/runs/{run_id}/files` | 获取生成工程文件树 |
+| GET | `/api/v1/runs/{run_id}/files/content` | 读取单个生成文件 |
+| GET | `/api/v1/runs/{run_id}/diff` | 获取生成工程 Diff |
+| GET | `/api/v1/runs/{run_id}/download` | 下载完整工程 ZIP |
 
 接口应返回稳定的错误码和请求追踪标识。长任务启动接口不能在 HTTP 请求中同步等待整个生成流程结束。
 
@@ -412,6 +416,8 @@ MVP 至少提供以下接口，统一使用 `/api/v1` 前缀：
 - [ ] Milvus 检索数量、上下文长度和 Agent 输入都能通过配置或运行记录核查。
 - [ ] 公共骨架使用模板生成，且运行记录中存在对应模板事件。
 - [ ] 非特别要求时，生成工程不依赖平台的 Milvus、Neo4j 或 Agent 服务。
+- [ ] 前端能够创建项目、启动运行并通过 SSE 查看实时事件。
+- [ ] 前端能够浏览生成文件、查看内容和 Diff、下载完整工程 ZIP。
 - [ ] `docs/DEVELOPMENT_TOKEN_USAGE.md` 能根据 Codex 会话日志重新生成，并记录每次开发任务的输入、输出、缓存和合计 Token。
 - [ ] 开发 Token 文档能够按每次模型响应计算峰谷费用、累计估算费用，并明确说明其与最终账单的差异。
 

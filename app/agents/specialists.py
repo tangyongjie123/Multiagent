@@ -119,7 +119,8 @@ class LLMSpecialistExecutor:
             ArchitectureSpec,
             system=(
                 "你是 Architect Agent。根据需求和 PM 结果设计单体 Spring Boot "
-                "REST 服务。必须使用 Java 包名 com.example.task。"
+                "REST 服务。必须选择一个以 com.example. 开头的稳定小写 Java 包名，"
+                "例如任务系统使用 com.example.task，图书系统使用 com.example.book。"
                 "实体、接口和错误码必须一致，不得引入未声明依赖。"
                 "数据库使用 JPA，demo 环境使用 H2。"
             ),
@@ -135,6 +136,11 @@ class LLMSpecialistExecutor:
         )
 
     async def _run_coder(self, state: WorkflowState) -> AgentResult:
+        architecture = self._role_payload(state, AgentRole.ARCHITECT)
+        package_name = str(architecture.get("package_name") or "com.example.app")
+        package_path = package_name.replace(".", "/")
+        required_prefix = f"src/main/java/{package_path}/"
+        application_path = self.workspace.write_application(package_name)
         repair_feedback = {
             "tester": self._role_result(state, AgentRole.TESTER),
             "reviewer": self._role_result(state, AgentRole.REVIEWER),
@@ -144,48 +150,96 @@ class LLMSpecialistExecutor:
             if int(state.get("repair_attempts", 0)) > 0
             else ""
         )
-        payload, usage = await self._invoke(
+        base_context = (
+            f"需求：\n{state.get('requirement', '')}\n\n"
+            f"PM 规格：\n{_json(self._role_payload(state, AgentRole.PM))}\n\n"
+            f"架构规格：\n{_json(architecture)}\n\n"
+            f"修复反馈：\n{_json(repair_feedback)}\n\n"
+            f"{repair_instruction}"
+        )
+        domain_payload, domain_usage = await self._invoke(
             CodeBundle,
             system=(
-                "你是 Coder Agent。生成完整、可编译的 Spring Boot 生产代码。"
-                "只能生成 src/main/java/com/example/task/ 下的 Java 文件。"
-                "包名必须为 com.example.task 或其子包。"
-                "禁止生成 pom.xml、启动类、配置文件、README、测试和文档。"
+                "你是 Coder Agent 的领域层生成阶段。生成实体、枚举、DTO、Repository "
+                "和 Service。只能生成目标包及其子包下的 Java 文件。"
+                "不要生成 Controller、异常处理器、配置、启动类、测试或文档。"
                 "禁止使用 Lombok。使用 Jakarta Validation、Spring Data JPA、"
                 "标准 Java 21 语法。文件内容必须是完整源码，不是 diff。"
-                "OpenAPI 注解仅可使用 @Tag、@Operation、@ApiResponse、"
-                "@Parameter 和 @Schema(description=...)，"
-                "禁止使用 enumValues 等易变属性。"
+                "包名必须严格使用架构中的 package_name。"
+            ),
+            user=base_context,
+        )
+        domain_written = self.workspace.write_generated_files(
+            domain_payload.files,
+            required_prefix=required_prefix,
+        )
+        domain_sources = self.workspace.read_java_sources()
+        contract_sources = {
+            path: content
+            for path, content in domain_sources.items()
+            if "/service/" in path or "/dto/" in path
+        }
+        web_payload, web_usage = await self._invoke(
+            CodeBundle,
+            system=(
+                "你是 Coder Agent 的 Web 层生成阶段。生成 Controller、异常类、"
+                "全局异常处理及必要的 Web 配置。只能生成目标包及其子包下的 Java 文件。"
+                "不要重复生成实体、DTO、Repository 和 Service。"
+                "禁止生成 pom.xml、启动类、配置文件、测试和文档。"
+                "禁止使用 Lombok。OpenAPI 注解仅可使用 @Tag、@Operation、"
+                "@ApiResponse、@Parameter 和 @Schema(description=...)，"
+                "禁止使用 enumValues 等易变属性。包名必须严格使用 package_name。"
             ),
             user=(
-                f"需求：\n{state.get('requirement', '')}\n\n"
-                f"PM 规格：\n{_json(self._role_payload(state, AgentRole.PM))}\n\n"
-                "架构规格：\n"
-                f"{_json(self._role_payload(state, AgentRole.ARCHITECT))}\n\n"
-                f"修复反馈：\n{_json(repair_feedback)}\n\n"
-                f"{repair_instruction}"
+                f"{base_context}\n\n"
+                f"已生成文件：{_json(domain_written)}。\n\n"
+                "必须严格调用以下已生成的 Service 和 DTO 源码，"
+                "不得自行发明方法名或字段名：\n"
+                f"{_json(contract_sources)}"
             ),
         )
-        written_files = self.workspace.write_generated_files(
-            payload.files,
-            required_prefix="src/main/java/com/example/task/",
+        web_written = self.workspace.write_generated_files(
+            web_payload.files,
+            required_prefix=required_prefix,
         )
+        usage = {
+            key: domain_usage[key] + web_usage[key]
+            for key in ("input_tokens", "output_tokens", "total_tokens")
+        }
         return AgentResult(
             role=AgentRole.CODER,
-            summary=payload.summary,
+            summary=f"{domain_payload.summary}；{web_payload.summary}",
             artifacts={
-                "payload": payload.model_dump(mode="json"),
+                "payload": {
+                    "summary": f"{domain_payload.summary}；{web_payload.summary}",
+                    "files": [
+                        *[
+                            item.model_dump(mode="json")
+                            for item in domain_payload.files
+                        ],
+                        *[
+                            item.model_dump(mode="json")
+                            for item in web_payload.files
+                        ],
+                    ],
+                    "notes": [
+                        *domain_payload.notes,
+                        *web_payload.notes,
+                    ],
+                },
                 "usage": usage,
-                "written_files": written_files,
+                "written_files": [application_path, *domain_written, *web_written],
             },
         )
 
     async def _run_tester(self, state: WorkflowState) -> AgentResult:
         architecture = self._role_payload(state, AgentRole.ARCHITECT)
         test_file = self._build_contract_test(architecture)
+        package_name = str(architecture.get("package_name") or "com.example.app")
+        package_path = package_name.replace(".", "/")
         written_files = self.workspace.write_generated_files(
             [test_file],
-            required_prefix="src/test/java/com/example/task/",
+            required_prefix=f"src/test/java/{package_path}/",
         )
         execution = await run_maven_tests(self.workspace.root)
         summary = (
@@ -218,6 +272,8 @@ class LLMSpecialistExecutor:
     def _build_contract_test(architecture: dict[str, Any]) -> GeneratedFile:
         """根据接口契约生成只依赖 HTTP 的集成测试。"""
 
+        package_name = str(architecture.get("package_name") or "com.example.app")
+        package_path = package_name.replace(".", "/")
         endpoints = architecture.get("endpoints", [])
         get_path = next(
             (
@@ -239,6 +295,59 @@ class LLMSpecialistExecutor:
             (item["path"] for item in endpoints if item.get("method") == "POST"),
             None,
         )
+        put_path = next(
+            (
+                item["path"]
+                for item in endpoints
+                if item.get("method") == "PUT" and "{" in item.get("path", "")
+            ),
+            None,
+        )
+        delete_path = next(
+            (
+                item["path"]
+                for item in endpoints
+                if item.get("method") == "DELETE" and "{" in item.get("path", "")
+            ),
+            None,
+        )
+        entities = architecture.get("entities", [])
+        fields = entities[0].get("fields", []) if entities else []
+        sample: dict[str, Any] = {}
+        has_isbn = False
+        for field in fields:
+            name = str(field.get("name", ""))
+            java_type = str(field.get("java_type", ""))
+            description = str(field.get("description", "")).upper()
+            if name in {"id", "createdAt", "updatedAt"}:
+                continue
+            if name.lower() == "isbn":
+                sample[name] = "__ISBN__"
+                has_isbn = True
+            elif java_type in {"Integer", "Long", "int", "long"}:
+                sample[name] = 2024 if "YEAR" in name.upper() else 1
+            elif "Instant" in java_type or "Date" in java_type:
+                sample[name] = "2099-12-31T10:00:00Z"
+            elif name.lower() == "title":
+                sample[name] = "集成测试对象"
+            elif name.lower() == "author":
+                sample[name] = "测试作者"
+            elif name.lower() == "description":
+                sample[name] = "多 Agent 集成测试"
+            elif name.lower() == "category":
+                sample[name] = "测试分类"
+            elif "status" in name.lower():
+                values = [
+                    item
+                    for item in ("AVAILABLE", "TODO", "IN_PROGRESS", "DONE", "BORROWED")
+                    if item in description
+                ]
+                sample[name] = values[0] if values else "AVAILABLE"
+            else:
+                sample[name] = "测试值"
+
+        json_body = json.dumps(sample, ensure_ascii=False)
+        body_literal = json.dumps(json_body, ensure_ascii=False)
         tests = [
             """
     @Test
@@ -284,10 +393,40 @@ class LLMSpecialistExecutor:
     }}
 """.strip()
             )
+        if post_path and item_path and put_path and delete_path:
+            tests.append(
+                f"""
+    @Test
+    void fullCrudFlowWorks() throws Exception {{
+        var created = post("{post_path}", validBody());
+        assertTrue(created.statusCode() >= 200 && created.statusCode() < 300);
+        String id = OBJECT_MAPPER.readTree(created.body()).path("id").asText();
+        assertFalse(id.isBlank());
+
+        String itemPath = "{item_path}".replace("{{id}}", id);
+        assertEquals(200, get(itemPath).statusCode());
+        assertTrue(put("{put_path}".replace("{{id}}", id), validBody()).statusCode() < 300);
+        assertTrue(delete(itemPath).statusCode() < 300);
+        assertEquals(404, get(itemPath).statusCode());
+    }}
+""".strip()
+            )
+        if post_path and has_isbn:
+            tests.append(
+                f"""
+    @Test
+    void duplicateIsbnReturnsConflict() throws Exception {{
+        String body = validBody();
+        assertTrue(post("{post_path}", body).statusCode() < 300);
+        assertEquals(409, post("{post_path}", body).statusCode());
+    }}
+""".strip()
+            )
         source = f"""\
-package com.example.task;
+package {package_name};
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -295,7 +434,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Locale;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -304,6 +445,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GeneratedApiContractTest {{
     private static final HttpClient CLIENT = HttpClient.newHttpClient();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String VALID_BODY = {body_literal};
 
     @LocalServerPort
     private int port;
@@ -320,11 +463,43 @@ class GeneratedApiContractTest {{
         return CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
     }}
 
+    private HttpResponse<String> post(String path, String body) throws Exception {{
+        var request = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+    }}
+
+    private HttpResponse<String> put(String path, String body) throws Exception {{
+        var request = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+    }}
+
+    private HttpResponse<String> delete(String path) throws Exception {{
+        var request = HttpRequest.newBuilder(URI.create(baseUrl + path)).DELETE().build();
+        return CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+    }}
+
+    private String validBody() {{
+        return VALID_BODY.replace(
+                "__ISBN__",
+                String.format(Locale.ROOT, "%013d",
+                        Math.abs(System.nanoTime()) % 10_000_000_000_000L)
+        );
+    }}
+
 {chr(10).join(tests)}
 }}
 """
         return GeneratedFile(
-            path="src/test/java/com/example/task/GeneratedApiContractTest.java",
+            path=(
+                f"src/test/java/{package_path}/"
+                "GeneratedApiContractTest.java"
+            ),
             content=source,
         )
 

@@ -56,6 +56,7 @@ class RunRecord(Base):
     status: Mapped[str] = mapped_column(String(40), default="pending")
     current_agent: Mapped[str | None] = mapped_column(String(40))
     is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    worker_id: Mapped[str | None] = mapped_column(String(64))
     token_budget: Mapped[int] = mapped_column(Integer, default=200_000)
     input_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
     output_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -67,6 +68,7 @@ class RunRecord(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

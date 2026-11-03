@@ -75,6 +75,18 @@ async def initialize_database() -> None:
 
     async with get_engine().begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        await connection.execute(
+            text(
+                "ALTER TABLE runs ADD COLUMN IF NOT EXISTS "
+                "worker_id VARCHAR(64)"
+            )
+        )
+        await connection.execute(
+            text(
+                "ALTER TABLE runs ADD COLUMN IF NOT EXISTS "
+                "heartbeat_at TIMESTAMPTZ"
+            )
+        )
 
 
 async def check_database() -> bool:

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = Field(default=8000, ge=1, le=65535)
     log_level: str = "INFO"
+    uvicorn_access_log: bool = True
     frontend_origin: str = "http://localhost:5173"
     agent_execution_mode: Literal["simulation", "live"] = "simulation"
     chat_provider: Literal["deepseek", "dashscope"] = "deepseek"
