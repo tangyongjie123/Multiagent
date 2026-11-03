@@ -27,7 +27,7 @@ mcp_http_app = create_mcp_http_app()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """初始化日志和数据库，并在退出时释放连接池。"""
+    """初始化数据库、checkpoint、Neo4j 和 MCP 服务生命周期。"""
 
     settings = get_settings()
     configure_logging(settings.log_level)
@@ -38,6 +38,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await initialize_checkpointer()
     with suppress(Exception):
         await initialize_neo4j()
+    # MCP HTTP 应用与 FastAPI 共用进程；会话管理器必须覆盖整个应用生命周期。
     async with mcp_server.session_manager.run():
         yield
     await close_neo4j()
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     application.include_router(api_router)
+    # 挂载后 Agent 通过 /mcp/ 使用 Streamable HTTP 调用只读工具。
     application.mount("/mcp", mcp_http_app)
 
     @application.exception_handler(DatabaseUnavailableError)

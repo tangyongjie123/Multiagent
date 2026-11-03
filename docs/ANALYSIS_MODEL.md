@@ -13,6 +13,8 @@
 - 分析过程不执行目标仓库代码。
 - 模型、Token、事件和问题都保留结构化记录。
 
+所有实际发送给模型的提示词集中位于 `app/agents/prompts.py`。主 Agent 使用 LangGraph 确定性路由，没有 LLM 提示词；详细位置见 `docs/AGENT_PROMPTS.md`。
+
 ## 2. Agent 输入与输出
 
 ### Main Agent

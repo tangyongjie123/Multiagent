@@ -35,6 +35,8 @@ async def _create_analysis(
     repository: RepositoryRecord,
     branch: str | None,
 ) -> AnalysisRecord:
+    """创建一个待执行分析并写入初始事件。"""
+
     analysis = AnalysisRecord(
         repository_id=repository.id,
         status=AnalysisStatus.PENDING.value,
@@ -89,6 +91,8 @@ async def submit_repository(
 
 @router.get("", response_model=list[RepositoryResponse])
 async def list_repositories(session: SessionDep) -> list[RepositoryResponse]:
+    """按创建时间倒序返回仓库列表。"""
+
     repositories = await session.scalars(
         select(RepositoryRecord).order_by(RepositoryRecord.created_at.desc())
     )
@@ -103,6 +107,8 @@ async def get_repository(
     repository_id: UUID,
     session: SessionDep,
 ) -> RepositoryResponse:
+    """返回单个仓库元数据。"""
+
     repository = await session.get(RepositoryRecord, repository_id)
     if repository is None:
         raise HTTPException(status_code=404, detail="仓库不存在")
@@ -117,6 +123,8 @@ async def list_repository_analyses(
     repository_id: UUID,
     session: SessionDep,
 ) -> list[AnalysisResponse]:
+    """返回指定仓库的分析历史。"""
+
     repository = await session.get(RepositoryRecord, repository_id)
     if repository is None:
         raise HTTPException(status_code=404, detail="仓库不存在")

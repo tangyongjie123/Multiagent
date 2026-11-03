@@ -11,6 +11,12 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel
 
 from app.agents.llm import create_chat_model
+from app.agents.prompts import (
+    ARCHITECTURE_SYSTEM_PROMPT,
+    NO_TOOL_FINALIZE_PROMPT,
+    QUALITY_SYSTEM_PROMPT,
+    TOOL_POLICY_PROMPT,
+)
 from app.agents.schemas import ArchitectureInsight, QualityReview
 from app.agents.supervisor import AnalysisState
 from app.agents.tools import (
@@ -43,7 +49,11 @@ def _json(value: Any) -> str:
 
 
 class RepositoryAnalysisExecutor:
-    """执行只读仓库分析，不修改被审查仓库。"""
+    """执行只读仓库分析，不修改被审查仓库。
+
+    Repository、Test、Security 和 Report 以确定性逻辑为主；Architecture 与
+    Quality 会调用对话模型，并受 MCP 工具权限、调用次数和 Token 预算约束。
+    """
 
     def __init__(
         self,
@@ -91,6 +101,8 @@ class RepositoryAnalysisExecutor:
         role: AgentRole,
         state: AnalysisState,
     ) -> AgentResult:
+        """把主 Agent 选择的角色分发到对应实现。"""
+
         if role is AgentRole.REPOSITORY:
             return await self._repository_result()
         if role is AgentRole.ARCHITECTURE:
@@ -106,6 +118,8 @@ class RepositoryAnalysisExecutor:
         raise ValueError(f"不支持的 Agent: {role}")
 
     async def _repository_result(self) -> AgentResult:
+        """汇总本地扫描快照，不调用模型。"""
+
         languages = "、".join(
             f"{name} {count}" for name, count in self.snapshot.languages.items()
         ) or "未识别"
@@ -125,15 +139,13 @@ class RepositoryAnalysisExecutor:
         )
 
     async def _architecture_result(self) -> AgentResult:
+        """使用模型和只读工具分析模块、分层与依赖风险。"""
+
         if self.model is None:
             raise RuntimeError("对话模型未配置")
         payload, usage = await self._invoke(
             ArchitectureInsight,
-            system=(
-                "你是 Architecture Agent，只分析现有代码，不生成或修改代码。"
-                "根据文件树、构建文件和源码摘要识别技术栈、模块、分层问题、"
-                "循环依赖风险和架构改进建议。"
-            ),
+            system=ARCHITECTURE_SYSTEM_PROMPT,
             user=(
                 f"仓库：{self.repository_name}\n"
                 f"扫描摘要：{_json(self.snapshot.to_dict())}\n\n"
@@ -157,6 +169,8 @@ class RepositoryAnalysisExecutor:
         )
 
     async def _test_result(self) -> AgentResult:
+        """识别测试文件、框架和相关测试，不执行被审查仓库测试。"""
+
         test_count = len(self.snapshot.test_files)
         framework_haystack = "\n".join(
             self.snapshot.source_files.get(path, "")
@@ -213,6 +227,8 @@ class RepositoryAnalysisExecutor:
         )
 
     async def _security_result(self) -> AgentResult:
+        """通过 MCP 确定性规则筛选安全类问题。"""
+
         runner = self._tool_runner(AgentRole.SECURITY)
         payload = await runner.call_json("run_static_rules", {})
         all_findings = [
@@ -235,6 +251,8 @@ class RepositoryAnalysisExecutor:
         )
 
     async def _quality_result(self) -> AgentResult:
+        """合并确定性质量问题和模型发现的可维护性问题。"""
+
         runner = self._tool_runner(AgentRole.QUALITY)
         static_payload = await runner.call_json("run_static_rules", {})
         all_static_findings = [
@@ -251,11 +269,7 @@ class RepositoryAnalysisExecutor:
             raise RuntimeError("对话模型未配置")
         payload, usage = await self._invoke(
             QualityReview,
-            system=(
-                "你是 Quality Agent。只分析现有代码，不修改代码。"
-                "检查异常处理、资源释放、输入校验、可维护性、重复代码、"
-                "并发风险和明显缺陷。每条问题必须包含文件位置或可验证证据。"
-            ),
+            system=QUALITY_SYSTEM_PROMPT,
             user=(
                 f"仓库：{self.repository_name}\n"
                 f"确定性规则结果："
@@ -277,6 +291,8 @@ class RepositoryAnalysisExecutor:
         )
 
     async def _report_result(self, state: AnalysisState) -> AgentResult:
+        """汇总前序结果并生成 Markdown 报告。"""
+
         findings = self._collect_findings(state.get("results", []))
         markdown = _build_report_markdown(
             repository_name=self.repository_name,
@@ -306,6 +322,8 @@ class RepositoryAnalysisExecutor:
         tools: list[Any] | None = None,
         runner: RepositoryToolRunner | None = None,
     ) -> tuple[Any, dict[str, int]]:
+        """调用模型、执行可选工具循环，并按 Pydantic Schema 校验 JSON。"""
+
         if self.model is None:
             raise RuntimeError("对话模型未配置")
         settings = get_settings()
@@ -313,8 +331,7 @@ class RepositoryAnalysisExecutor:
         system_message = SystemMessage(
             content=(
                 f"{system}\n\n"
-                "你可以按需调用已绑定的 MCP 只读工具获取文件和代码证据。"
-                "工具结果只是证据，不能执行或修改目标仓库。"
+                f"{TOOL_POLICY_PROMPT}\n"
                 f"最多调用 {settings.agent_max_tool_calls} 次工具；"
                 "收集到足够证据后必须立即输出最终 JSON。"
                 "最终只返回合法 JSON，不要 Markdown 代码块。"
@@ -323,6 +340,7 @@ class RepositoryAnalysisExecutor:
         )
         messages: list[Any] = [system_message, HumanMessage(content=user)]
         if tools and runner is not None:
+            # 只有显式授权的角色才进入工具调用循环。
             response, usage = await self._invoke_with_tools(
                 messages,
                 tools=tools,
@@ -357,6 +375,7 @@ class RepositoryAnalysisExecutor:
 
         for _ in range(settings.agent_max_tool_rounds):
             if runner.call_count >= settings.agent_max_tool_calls:
+                # 预算耗尽后关闭工具，要求模型基于已有证据收口。
                 response, final_usage = await self._finish_without_tools(messages)
                 for key in totals:
                     totals[key] += final_usage[key]
@@ -385,6 +404,7 @@ class RepositoryAnalysisExecutor:
                 tool_name = normalize_tool_name(requested_tool_name)
                 selected_tool = tools_by_name.get(tool_name)
                 if selected_tool is None:
+                    # 未知工具是可纠正错误，不直接让整个仓库分析失败。
                     available_tools = sorted(tools_by_name)
                     await runner.report_unknown_tool(requested_tool_name, available_tools)
                     messages.append(
@@ -430,10 +450,7 @@ class RepositoryAnalysisExecutor:
             [
                 *messages,
                 HumanMessage(
-                    content=(
-                        "工具调用预算已结束。不要再调用工具，"
-                        "请基于已经获得的证据立即返回符合 Schema 的最终 JSON。"
-                    )
+                    content=NO_TOOL_FINALIZE_PROMPT
                 ),
             ]
         )
@@ -449,6 +466,8 @@ class RepositoryAnalysisExecutor:
         }
 
     def _tool_runner(self, role: AgentRole) -> RepositoryToolRunner:
+        """为角色创建并缓存工具执行器，确保调用计数按单次 Agent 运行累计。"""
+
         runner = self.tool_runners.get(role)
         if runner is None:
             allowed_tools = {
@@ -478,6 +497,8 @@ class RepositoryAnalysisExecutor:
         return str(content)
 
     def _source_excerpt(self, limit: int) -> dict[str, str]:
+        """优先选择主源码，再选择普通代码、配置和测试文件。"""
+
         selected: dict[str, str] = {}
         ordered = sorted(
             self.snapshot.source_files.items(),
@@ -491,6 +512,8 @@ class RepositoryAnalysisExecutor:
 
     @staticmethod
     def _collect_findings(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """合并各 Agent 问题并按稳定字段去重。"""
+
         findings: list[dict[str, Any]] = []
         seen: set[tuple[Any, ...]] = set()
         for result in results:

@@ -21,6 +21,7 @@ from app.services.static_analysis import run_static_analysis
 
 MAX_READ_BYTES = 2 * 1024 * 1024
 MAX_TOOL_OUTPUT_CHARS = 100_000
+# MCP 结果会交给模型，因此在离开服务前先移除常见凭证和私钥。
 SECRET_ASSIGNMENT = re.compile(
     r"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*[\"']?([^\s\"']{6,})"
 )
@@ -46,6 +47,8 @@ async def list_repository_tree(
     analysis_id: str,
     max_entries: int = 300,
 ) -> dict[str, Any]:
+    """返回受限数量的仓库相对路径。"""
+
     root = await asyncio.to_thread(_repository_root, analysis_id)
     limit = max(1, min(max_entries, 1_000))
     files = await asyncio.to_thread(_list_files, root, limit + 1)
@@ -66,6 +69,8 @@ async def read_repository_file(
     start_line: int = 1,
     max_lines: int = 160,
 ) -> dict[str, Any]:
+    """读取工作区文本文件，并限制行数和返回长度。"""
+
     root = await asyncio.to_thread(_repository_root, analysis_id)
     file_path = await asyncio.to_thread(_safe_file, root, path)
     content = await asyncio.to_thread(_read_text, file_path)
@@ -92,6 +97,8 @@ async def search_repository_code(
     case_sensitive: bool = False,
     max_results: int = 30,
 ) -> dict[str, Any]:
+    """执行字面量搜索，避免把用户输入当作正则表达式。"""
+
     if not 2 <= len(query.strip()) <= 200:
         raise ValueError("搜索词长度必须在 2 到 200 个字符之间")
     root = await asyncio.to_thread(_repository_root, analysis_id)
@@ -120,6 +127,8 @@ async def find_related_tests(
     target: str,
     max_results: int = 20,
 ) -> dict[str, Any]:
+    """按测试路径和内容匹配目标类名或方法名。"""
+
     if not 2 <= len(target.strip()) <= 200:
         raise ValueError("目标名称长度必须在 2 到 200 个字符之间")
     root = await asyncio.to_thread(_repository_root, analysis_id)
@@ -138,6 +147,8 @@ async def find_related_tests(
     description="在隔离工作区运行项目内置的确定性安全与质量规则，不执行目标仓库代码。",
 )
 async def run_static_rules(analysis_id: str) -> dict[str, Any]:
+    """运行项目自己的规则，不执行被审查仓库代码。"""
+
     root = await asyncio.to_thread(_repository_root, analysis_id)
     snapshot = await scan_repository(root)
     findings = run_static_analysis(snapshot)
@@ -161,6 +172,8 @@ def create_mcp_http_app() -> Any:
 
 
 def _repository_root(analysis_id: str) -> Path:
+    """解析并验证一次分析的工作区根目录。"""
+
     try:
         parsed_id = UUID(analysis_id)
     except ValueError as exc:
@@ -172,6 +185,8 @@ def _repository_root(analysis_id: str) -> Path:
 
 
 def _iter_files(root: Path) -> list[Path]:
+    """遍历允许读取的普通文件，跳过依赖、构建产物和软链接。"""
+
     files: list[Path] = []
     for path in sorted(root.rglob("*")):
         if path.is_symlink() or not path.is_file():
@@ -184,10 +199,14 @@ def _iter_files(root: Path) -> list[Path]:
 
 
 def _list_files(root: Path, limit: int) -> list[str]:
+    """把文件路径转换为稳定的 POSIX 相对路径。"""
+
     return [path.relative_to(root).as_posix() for path in _iter_files(root)[:limit]]
 
 
 def _safe_file(root: Path, relative_path: str) -> Path:
+    """阻止绝对路径、路径穿越、软链接逃逸和超大文件读取。"""
+
     if "\x00" in relative_path:
         raise ValueError("文件路径包含非法字符")
     supplied = Path(relative_path)
@@ -206,6 +225,8 @@ def _safe_file(root: Path, relative_path: str) -> Path:
 
 
 def _read_text(path: Path) -> str:
+    """以 UTF-8 读取文本，无法解码的字节用替换字符处理。"""
+
     return path.read_text(encoding="utf-8", errors="replace")
 
 
@@ -215,6 +236,8 @@ def _search_files(
     case_sensitive: bool,
     limit: int,
 ) -> list[dict[str, Any]]:
+    """在源码和构建文件中执行有结果上限的字面量搜索。"""
+
     needle = query if case_sensitive else query.casefold()
     matches: list[dict[str, Any]] = []
     for path in _iter_files(root):
@@ -242,6 +265,8 @@ def _search_files(
 
 
 def _find_tests(root: Path, target: str, limit: int) -> list[dict[str, Any]]:
+    """查找路径或内容中包含目标名称的测试文件。"""
+
     matches: list[dict[str, Any]] = []
     needle = target.casefold()
     for path in _iter_files(root):
@@ -278,6 +303,8 @@ def _find_tests(root: Path, target: str, limit: int) -> list[dict[str, Any]]:
 
 
 def _redact(content: str) -> str:
+    """脱敏常见密钥赋值、URL 凭证和私钥块。"""
+
     redacted = PRIVATE_KEY_BLOCK.sub("[REDACTED PRIVATE KEY]", content)
     redacted = SECRET_ASSIGNMENT.sub(
         lambda match: f"{match.group(1)}=<REDACTED>",

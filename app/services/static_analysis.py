@@ -11,6 +11,7 @@ from app.domain.models import (
 )
 from app.services.repository import RepositorySnapshot
 
+# 这些规则只用于提示风险，不能替代编译器、类型系统或专业 SAST。
 SECRET_PATTERN = re.compile(
     r"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*[\"']?([^\s\"']{6,})"
 )
@@ -22,10 +23,11 @@ TODO_PATTERN = re.compile(r"TODO|FIXME")
 
 
 def run_static_analysis(snapshot: RepositorySnapshot) -> list[Finding]:
-    """运行密钥、危险模式和基础质量规则。"""
+    """运行确定性密钥、危险模式和基础质量规则。"""
 
     findings: list[Finding] = []
     for path, content in snapshot.source_files.items():
+        # 安全规则：可能泄露凭证的内容只记录位置，不在证据中复制真实值。
         secret_match = SECRET_PATTERN.search(content) or PRIVATE_KEY_PATTERN.search(content)
         if secret_match:
             findings.append(
@@ -40,6 +42,7 @@ def run_static_analysis(snapshot: RepositorySnapshot) -> list[Finding]:
                     recommendation="立即撤销凭证，改用环境变量或 Secret 管理。",
                 )
             )
+        # 命令执行本身不一定有漏洞，需结合参数来源由模型进一步判断。
         command_match = COMMAND_PATTERN.search(content)
         if command_match:
             findings.append(
@@ -54,6 +57,7 @@ def run_static_analysis(snapshot: RepositorySnapshot) -> list[Finding]:
                     recommendation="限制允许命令，避免拼接外部参数，并在沙箱中运行。",
                 )
             )
+        # 质量规则：空 catch 和标准输出通常是可直接验证的工程问题。
         catch_match = EMPTY_CATCH_PATTERN.search(content)
         if catch_match:
             findings.append(
@@ -82,6 +86,7 @@ def run_static_analysis(snapshot: RepositorySnapshot) -> list[Finding]:
                     recommendation="改用 SLF4J 或项目统一日志组件。",
                 )
             )
+        # 每个 TODO/FIXME 单独保留行号，方便前端直接定位。
         for todo_match in TODO_PATTERN.finditer(content):
             findings.append(
                 Finding(

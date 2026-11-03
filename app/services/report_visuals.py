@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from html import escape
 from typing import Any
 
+# 报告图表使用暖纸色背景和近黑色文字，避免浏览器默认白色与高饱和色。
 PAPER = "#f3eee1"
 INK = "#17140e"
 SOFT_INK = "#4a463c"
@@ -53,7 +54,11 @@ def build_report_visuals(
     findings: list[dict[str, Any]],
     generated_at: datetime | None = None,
 ) -> ReportVisuals:
-    """按数据形状生成严重级别和分类图片。"""
+    """按数据形状生成严重级别和分类图片。
+
+    严重级别是同一总量的构成关系，使用 100% 堆叠条；分类是少量类目比较，
+    使用排序后的零基线横向条形图。
+    """
 
     generated = generated_at or datetime.now(UTC)
     source_line = (
@@ -87,7 +92,7 @@ def build_report_visuals(
 
 
 def inject_markdown_visuals(markdown: str, visuals: ReportVisuals) -> str:
-    """把 SVG 图片以 data URI 嵌入 Markdown。"""
+    """把 SVG 图片以 data URI 嵌入 Markdown，使报告单文件可携带图表。"""
 
     severity_data = _svg_data_uri(visuals.severity_svg)
     category_data = _svg_data_uri(visuals.category_svg)
@@ -119,7 +124,7 @@ def build_html_report(
     findings: list[dict[str, Any]],
     visuals: ReportVisuals,
 ) -> str:
-    """生成无脚本、内嵌图表的自包含 HTML 报告。"""
+    """生成无脚本、内嵌图表且经过 HTML 转义的自包含报告。"""
 
     category_groups = {
         category: [
@@ -130,6 +135,7 @@ def build_html_report(
         for category in CATEGORY_ORDER
     }
     finding_sections = []
+    # 问题详情按固定分类顺序输出，保证不同报告的结构一致。
     for category, items in category_groups.items():
         cards = []
         for index, item in enumerate(items, start=1):
@@ -279,6 +285,8 @@ def _severity_chart(
     total: int,
     source_line: str,
 ) -> tuple[str, str]:
+    """生成严重级别 100% 堆叠条 SVG 和无障碍替代文本。"""
+
     width = 960
     height = 310
     bar_x = 42
@@ -354,6 +362,8 @@ def _category_chart(
     total: int,
     source_line: str,
 ) -> tuple[str, str]:
+    """生成按数量降序的分类横向条形图 SVG。"""
+
     width = 960
     height = 430
     ranked = sorted(
@@ -409,9 +419,13 @@ def _category_chart(
 
 
 def _svg_data_uri(svg: str) -> str:
+    """把 SVG 转为 Markdown 可内嵌的 base64 data URI。"""
+
     encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
     return f"data:image/svg+xml;base64,{encoded}"
 
 
 def _percentage(count: int, total: int) -> str:
+    """格式化百分比，并处理零问题仓库。"""
+
     return f"{count / total * 100:.1f}%" if total else "0.0%"

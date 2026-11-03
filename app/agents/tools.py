@@ -20,6 +20,7 @@ EventEmitter = Callable[
     Awaitable[None],
 ]
 
+# 每个角色只拿到完成自身任务所需的最小工具集合。
 ARCHITECTURE_TOOLS = {
     "list_repository_tree",
     "read_repository_file",
@@ -32,6 +33,7 @@ QUALITY_TOOLS = {
 }
 TEST_TOOLS = {"find_related_tests"}
 SECURITY_TOOLS = {"run_static_rules"}
+# 模型偶尔会把工具名说成近义词；别名仅用于兼容，不会扩大权限。
 TOOL_ALIASES = {
     "read_repository_tree": "list_repository_tree",
     "list_repository_files": "list_repository_tree",
@@ -81,6 +83,8 @@ class RepositoryToolRunner:
         self.call_count = 0
 
     async def call(self, tool_name: str, arguments: dict[str, Any]) -> str:
+        """校验权限与预算后调用 MCP，并记录开始、完成或失败事件。"""
+
         tool_name = normalize_tool_name(tool_name)
         if tool_name not in self.allowed_tools:
             raise PermissionError(f"{self.role.value} Agent 不允许调用 {tool_name}")
@@ -129,6 +133,8 @@ class RepositoryToolRunner:
             raise
 
     async def call_json(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """调用工具并把其 JSON 文本转换成字典。"""
+
         output = await self.call(tool_name, arguments)
         payload = json.loads(output)
         if not isinstance(payload, dict):
@@ -161,7 +167,7 @@ def build_langchain_tools(
     *,
     runner: RepositoryToolRunner,
 ) -> list[StructuredTool]:
-    """按 Agent 权限创建 LangChain 工具列表。"""
+    """按 Agent 权限创建 LangChain StructuredTool 列表。"""
 
     tools: list[StructuredTool] = []
     if "list_repository_tree" in runner.allowed_tools:
@@ -197,6 +203,8 @@ def build_langchain_tools(
 def _list_tree_call(
     runner: RepositoryToolRunner,
 ) -> Callable[..., Awaitable[str]]:
+    """把目录读取参数封装成模型可调用的异步函数。"""
+
     async def call(max_entries: int = 300) -> str:
         return await runner.call(
             "list_repository_tree",
@@ -209,6 +217,8 @@ def _list_tree_call(
 def _read_file_call(
     runner: RepositoryToolRunner,
 ) -> Callable[..., Awaitable[str]]:
+    """把文件读取参数封装成模型可调用的异步函数。"""
+
     async def call(
         path: str,
         start_line: int = 1,
@@ -229,6 +239,8 @@ def _read_file_call(
 def _search_code_call(
     runner: RepositoryToolRunner,
 ) -> Callable[..., Awaitable[str]]:
+    """把代码搜索参数封装成模型可调用的异步函数。"""
+
     async def call(
         query: str,
         case_sensitive: bool = False,
@@ -247,6 +259,8 @@ def _search_code_call(
 
 
 def _safe_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
+    """生成用于事件日志的参数摘要，避免记录任意大的对象。"""
+
     return {
         str(key)[:80]: _safe_value(value)
         for key, value in list(arguments.items())[:20]
@@ -254,6 +268,8 @@ def _safe_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def _safe_value(value: Any) -> Any:
+    """递归截断参数值，控制持久化事件大小。"""
+
     if isinstance(value, str):
         return value[:300]
     if isinstance(value, (int, float, bool)) or value is None:

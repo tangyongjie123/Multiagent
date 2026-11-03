@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     chat_provider: Literal["deepseek", "dashscope"] = "deepseek"
     auto_create_tables: bool = True
 
+    # 仓库访问与资源限制。
     git_allowed_hosts: str = "github.com,gitee.com,gitlab.com"
     git_executable: str | None = None
     git_clone_timeout_seconds: int = Field(default=180, ge=10, le=600)
@@ -51,17 +52,20 @@ class Settings(BaseSettings):
     git_analysis_max_files: int = Field(default=80, ge=10, le=500)
     git_analysis_max_file_chars: int = Field(default=20_000, ge=1_000)
 
+    # MCP 工具端点、超时和单 Agent 调用预算。
     mcp_tool_url: str | None = None
     mcp_tool_timeout_seconds: int = Field(default=20, ge=1, le=120)
     agent_max_tool_calls: int = Field(default=3, ge=1, le=30)
     agent_max_tool_rounds: int = Field(default=3, ge=1, le=10)
 
+    # 对话模型配置；DeepSeek 是默认提供方。
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     deepseek_pro_model: str = "deepseek-reasoner"
     chat_request_timeout_seconds: int = Field(default=120, ge=10, le=600)
 
+    # Embedding 与 DashScope 兼容配置。
     embedding_provider: str = "openai-compatible"
     embedding_api_key: SecretStr | None = None
     embedding_base_url: str | None = None
@@ -73,16 +77,19 @@ class Settings(BaseSettings):
     dashscope_embedding_model: str = "qwen3.7-text-embedding"
     dashscope_embedding_dimension: int = Field(default=1024, ge=1)
 
+    # Reranker 当前为预留能力，未接入分析主链路。
     rerank_api_key: SecretStr | None = None
     rerank_base_url: str | None = None
     rerank_model: str | None = None
 
+    # PostgreSQL 业务数据和 LangGraph checkpoint。
     postgres_host: str = "127.0.0.1"
     postgres_port: int = Field(default=5432, ge=1, le=65535)
     postgres_db: str = "multiagent"
     postgres_user: str = "multiagent"
     postgres_password: SecretStr | None = None
 
+    # Milvus 与 Neo4j 连接参数。当前用于健康检查和后续扩展。
     milvus_uri: str | None = None
     milvus_user: str | None = None
     milvus_password: SecretStr | None = None

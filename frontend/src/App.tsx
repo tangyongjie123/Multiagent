@@ -12,6 +12,7 @@ import type {
   Severity,
 } from "./types";
 
+// Agent 展示顺序必须与后端 LangGraph 的主流程保持一致。
 const AGENT_ORDER = [
   "main",
   "repository",
@@ -31,6 +32,7 @@ const AGENT_LABELS: Record<string, string> = {
   report: "Report",
 };
 const TERMINAL = ["completed", "failed", "cancelled"];
+// SSE 只监听这些事件；历史事件仍通过 REST 一次性加载。
 const STREAM_EVENTS = [
   "analysis.created",
   "analysis.started",
@@ -96,6 +98,7 @@ function repoShortName(repository: Repository): string {
 }
 
 export default function App() {
+  // 页面状态分为仓库选择、分析运行、问题产物和筛选器四组。
   const [health, setHealth] = useState<HealthResult | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState("");
@@ -124,6 +127,7 @@ export default function App() {
     [repositories, selectedRepositoryId],
   );
   const visibleFindings = useMemo(
+    // 分类和严重级别筛选可以叠加，而不是互相覆盖。
     () =>
       findings.filter(
         (item) =>
@@ -153,6 +157,7 @@ export default function App() {
     [findings],
   );
   const groupedFindings = useMemo(
+    // 明细按固定分类顺序展示，空分类不占用列表空间。
     () =>
       CATEGORIES.map(({ key, label, note }) => ({
         key,
@@ -163,6 +168,7 @@ export default function App() {
     [visibleFindings],
   );
   const severityGradient = useMemo(() => {
+    // 用 conic-gradient 画环形图，避免额外引入图表依赖。
     if (findings.length === 0) {
       return "conic-gradient(#d3d1c9 0 100%)";
     }
@@ -189,6 +195,7 @@ export default function App() {
     ["pending", "cloning", "analyzing"].includes(analysis.status);
 
   async function loadAnalysis(analysisId: string): Promise<Analysis> {
+    // 完成、失败或取消后加载最新问题与产物快照。
     const result = await api.analysis(analysisId);
     setAnalysis(result);
     if (TERMINAL.includes(result.status)) {
@@ -231,6 +238,7 @@ export default function App() {
   }
 
   useEffect(() => {
+    // 首屏加载依赖健康状态、仓库列表和最近一次分析。
     api
       .health()
       .then(setHealth)
@@ -245,6 +253,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // 运行中每秒刷新已耗时；终止状态停止计时器。
     setClock(Date.now());
     if (!analysis || TERMINAL.includes(analysis.status)) return;
     const timer = window.setInterval(() => setClock(Date.now()), 1000);
@@ -252,6 +261,7 @@ export default function App() {
   }, [analysis?.id, analysis?.status]);
 
   useEffect(() => {
+    // SSE 断线由浏览器自动重连，这里负责切换分析时清理旧监听器。
     if (!selectedAnalysisId || !streamEnabled) return;
     const stream = new EventSource(api.eventStreamUrl(selectedAnalysisId));
     const onEvent = (message: MessageEvent<string>) => {
@@ -348,6 +358,7 @@ export default function App() {
 
   return (
     <main className="shell">
+      {/* 顶部品牌与依赖服务健康状态。 */}
       <header className="masthead">
         <a className="brand" href="/">
           <span className="brand-mark">RG</span>
@@ -378,6 +389,7 @@ export default function App() {
       )}
 
       <div className="layout">
+        {/* 左侧负责创建分析、选择仓库。 */}
         <aside className="rail">
           <section className="rail-section">
             <div className="section-kicker">
@@ -440,6 +452,7 @@ export default function App() {
         <section className="workspace">
           {selectedRepository ? (
             <>
+              {/* 仓库标题、主要操作和实时状态概览。 */}
               <div className="repo-heading">
                 <div>
                   <p className="eyebrow">REPOSITORY REVIEW</p>
@@ -508,6 +521,7 @@ export default function App() {
               </div>
 
               <section className="agent-track">
+                {/* 主 Agent 与六个专业 Agent 的完成进度。 */}
                 {AGENT_ORDER.map((agent, index) => {
                   const complete =
                     (agent === "main" && analysis?.status === "completed") ||
@@ -530,6 +544,7 @@ export default function App() {
               </section>
 
               <section className="assessment-overview">
+                {/* 两类图表都直接由当前 findings 计算，刷新后保持同步。 */}
                 <article className="assessment-card severity-card">
                   <div className="assessment-heading">
                     <div>
@@ -638,6 +653,7 @@ export default function App() {
 
               {activeTab === "findings" && (
                 <section className="tab-panel">
+                  {/* 分类和严重级别是独立筛选维度。 */}
                   <div className="filter-row filter-row-labeled">
                     <span className="filter-label">分类</span>
                     <button
@@ -735,6 +751,7 @@ export default function App() {
 
               {activeTab === "timeline" && (
                 <section className="tab-panel timeline">
+                  {/* 时间线保留真实 Agent、工具和系统事件顺序。 */}
                   {events.map((event) => (
                     <article key={event.id}>
                       <span className="timeline-time">
@@ -782,6 +799,7 @@ export default function App() {
                     )}
                   </div>
                   {analysis?.status === "completed" && hasHtmlReport ? (
+                    /* 独立文档隔离报告样式，避免污染控制台 CSS。 */
                     <iframe
                       className="report-frame"
                       src={api.reportHtmlUrl(analysis.id)}

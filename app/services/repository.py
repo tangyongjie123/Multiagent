@@ -131,7 +131,10 @@ class RepositorySnapshot:
 
 
 def validate_repository_url(url: str) -> tuple[str, str]:
-    """校验 Git URL，返回规范化 URL 和主机名。"""
+    """校验 Git URL，返回规范化 URL 和主机名。
+
+    仅允许配置的主机，并拒绝内嵌用户名、密码和非 HTTP(S) 协议。
+    """
 
     parsed = urlparse(url.strip())
     if parsed.scheme not in {"https", "http"}:
@@ -222,6 +225,7 @@ def _scan_repository_sync(root: Path) -> RepositorySnapshot:
     total_bytes = 0
 
     for path in sorted(root.rglob("*")):
+        # 不跟随软链接，避免仓库内容指向工作区外部。
         if path.is_symlink() or not path.is_file():
             continue
         relative = path.relative_to(root)
@@ -252,6 +256,7 @@ def _scan_repository_sync(root: Path) -> RepositorySnapshot:
             "manage.py",
         }:
             entry_points.append(relative_text)
+        # source_files 有数量上限，防止把整个大型仓库发送给 Agent。
         if suffix in SOURCE_EXTENSIONS and len(source_files) < settings.git_analysis_max_files:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")

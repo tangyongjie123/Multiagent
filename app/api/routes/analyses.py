@@ -41,6 +41,8 @@ SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 async def _require_analysis(session: AsyncSession, analysis_id: UUID) -> AnalysisRecord:
+    """加载分析记录，不存在时返回 404。"""
+
     analysis = await session.get(AnalysisRecord, analysis_id)
     if analysis is None:
         raise HTTPException(status_code=404, detail="分析不存在")
@@ -52,6 +54,8 @@ async def _require_completed_artifact(
     analysis_id: UUID,
     kind: str,
 ) -> tuple[AnalysisRecord, AnalysisArtifactRecord]:
+    """要求分析已完成，并取得指定类型的产物元数据。"""
+
     analysis = await _require_analysis(session, analysis_id)
     if analysis.status != AnalysisStatus.COMPLETED.value:
         raise HTTPException(status_code=409, detail="分析尚未完成")
@@ -71,6 +75,8 @@ async def get_analysis(
     analysis_id: UUID,
     session: SessionDep,
 ) -> AnalysisResponse:
+    """返回单次分析的最新状态。"""
+
     return AnalysisResponse.model_validate(
         await _require_analysis(session, analysis_id)
     )
@@ -81,6 +87,8 @@ async def cancel_repository_analysis(
     analysis_id: UUID,
     session: SessionDep,
 ) -> AnalysisResponse:
+    """取消仍在运行的分析。"""
+
     analysis = await _require_analysis(session, analysis_id)
     if analysis.status in {
         AnalysisStatus.COMPLETED.value,
@@ -98,6 +106,8 @@ async def list_analysis_events(
     analysis_id: UUID,
     session: SessionDep,
 ) -> list[EventResponse]:
+    """按序号返回可回放的 Agent 与工具事件。"""
+
     await _require_analysis(session, analysis_id)
     events = await session.scalars(
         select(AnalysisEventRecord)
@@ -112,6 +122,8 @@ async def stream_analysis_events(
     analysis_id: UUID,
     request: Request,
 ) -> EventSourceResponse:
+    """通过 SSE 增量推送新事件，终止状态到达后关闭连接。"""
+
     session_factory = get_session_factory()
 
     async def event_generator() -> AsyncIterator[dict[str, str]]:
@@ -160,6 +172,8 @@ async def list_analysis_findings(
     analysis_id: UUID,
     session: SessionDep,
 ) -> list[FindingResponse]:
+    """按严重级别返回结构化问题。"""
+
     await _require_analysis(session, analysis_id)
     severity_order = case(
         (FindingRecord.severity == "critical", 0),
@@ -180,6 +194,8 @@ async def list_analysis_artifacts(
     analysis_id: UUID,
     session: SessionDep,
 ) -> list[ArtifactResponse]:
+    """返回报告、图表和中间产物元数据。"""
+
     await _require_analysis(session, analysis_id)
     artifacts = await session.scalars(
         select(AnalysisArtifactRecord)
@@ -194,6 +210,8 @@ async def get_analysis_report(
     analysis_id: UUID,
     session: SessionDep,
 ) -> PlainTextResponse:
+    """以纯文本形式查看 Markdown 报告。"""
+
     _, artifact = await _require_completed_artifact(
         session,
         analysis_id,
@@ -211,6 +229,8 @@ async def download_analysis_report(
     analysis_id: UUID,
     session: SessionDep,
 ) -> FileResponse:
+    """下载 Markdown 附件。"""
+
     analysis, artifact = await _require_completed_artifact(
         session,
         analysis_id,
@@ -240,6 +260,8 @@ async def get_html_report(
     analysis_id: UUID,
     session: SessionDep,
 ) -> HTMLResponse:
+    """查看内嵌 SVG 图表的自包含 HTML 报告。"""
+
     analysis = await _require_analysis(session, analysis_id)
     if analysis.status != AnalysisStatus.COMPLETED.value:
         raise HTTPException(status_code=409, detail="分析尚未完成")
@@ -279,6 +301,8 @@ async def download_html_report(
     analysis_id: UUID,
     session: SessionDep,
 ) -> Response:
+    """下载 HTML 图文报告。"""
+
     analysis = await _require_analysis(session, analysis_id)
     if analysis.status != AnalysisStatus.COMPLETED.value:
         raise HTTPException(status_code=409, detail="分析尚未完成")
@@ -315,7 +339,7 @@ async def download_html_report(
 
 
 def _resolve_artifact_path(analysis_id: UUID, storage_path: str) -> Path | None:
-    """校验报告文件位于对应分析工作区内。"""
+    """校验产物文件位于对应分析工作区内。"""
 
     try:
         workspace = repository_workspace(analysis_id).resolve(strict=True)

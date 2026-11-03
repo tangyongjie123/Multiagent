@@ -134,6 +134,7 @@ tests/          Python 自动化测试
 - [项目需求](docs/PROJECT_REQUIREMENTS.md)
 - [系统架构](docs/ARCHITECTURE.md)
 - [分析模型](docs/ANALYSIS_MODEL.md)
+- [Agent 提示词位置](docs/AGENT_PROMPTS.md)
 - [MCP 工具](docs/MCP_TOOLS.md)
 - [依赖与运行环境](docs/DEPENDENCIES.md)
 - [环境变量](docs/ENVIRONMENT_VARIABLES.md)

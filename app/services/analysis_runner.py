@@ -38,6 +38,7 @@ from app.services.repository import (
 WORKER_ID = uuid4().hex
 HEARTBEAT_INTERVAL_SECONDS = 15
 STALE_AFTER_SECONDS = 60
+# 保存本进程中的任务句柄，取消时才能中断正在运行的异步工作流。
 _RUNNING_TASKS: dict[UUID, asyncio.Task[None]] = {}
 _HEARTBEAT_TASKS: set[asyncio.Task[None]] = set()
 
@@ -76,6 +77,8 @@ async def recover_interrupted_analyses() -> None:
 
 
 async def _heartbeat_loop(analysis_id: UUID) -> None:
+    """对运行中的分析持续更新时间戳，供进程重启后的中断检测使用。"""
+
     while True:
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
         async with get_session_factory()() as session:
@@ -96,6 +99,8 @@ async def _emit_event(
     message: str,
     data: dict[str, Any],
 ) -> None:
+    """持久化事件，并同步更新当前 Agent 字段。"""
+
     async with get_session_factory()() as session:
         await append_analysis_event(
             session,
@@ -115,6 +120,8 @@ async def _emit_event(
 
 
 async def _mark_cancelled(analysis_id: UUID) -> None:
+    """把未结束的分析标记为用户取消。"""
+
     async with get_session_factory()() as session:
         analysis = await session.get(AnalysisRecord, analysis_id)
         if analysis is None or analysis.status in {
@@ -137,6 +144,8 @@ async def _mark_cancelled(analysis_id: UUID) -> None:
 
 
 async def cancel_analysis(analysis_id: UUID) -> None:
+    """先持久化取消状态，再终止本进程内的异步任务。"""
+
     await _mark_cancelled(analysis_id)
     task = _RUNNING_TASKS.get(analysis_id)
     if task is not None and not task.done():
@@ -158,6 +167,8 @@ async def run_analysis(analysis_id: UUID) -> None:
 
 
 async def _run_analysis(analysis_id: UUID) -> None:
+    """执行从克隆到报告落库的完整后台流程。"""
+
     settings = get_settings()
     session_factory = get_session_factory()
 
@@ -198,6 +209,7 @@ async def _run_analysis(analysis_id: UUID) -> None:
         await _emit_event(analysis_id, event_type, role, message, data)
 
     try:
+        # 第一阶段：浅克隆和只读扫描。
         workspace = repository_workspace(analysis_id)
         commit_sha = await clone_repository(repo_url, branch, workspace)
         snapshot = await scan_repository(workspace)
@@ -224,6 +236,7 @@ async def _run_analysis(analysis_id: UUID) -> None:
             )
             await session.commit()
 
+        # 第二阶段：交给 LangGraph 主 Agent 依次调度专业 Agent。
         executor = RepositoryAnalysisExecutor(
             snapshot=snapshot,
             repository_name=repo_name,
@@ -250,6 +263,7 @@ async def _run_analysis(analysis_id: UUID) -> None:
         failed = bool(result.get("failed"))
         final_status = AnalysisStatus.FAILED if failed else AnalysisStatus.COMPLETED
 
+        # 第三阶段：生成 Markdown、HTML、SVG 和结构化中间产物。
         findings = RepositoryAnalysisExecutor._collect_findings(
             result.get("results", [])
         )
@@ -289,6 +303,7 @@ async def _run_analysis(analysis_id: UUID) -> None:
             encoding="utf-8",
         )
 
+        # 第四阶段：问题、产物和最终状态在同一事务中落库。
         async with session_factory() as session:
             analysis = await session.get(AnalysisRecord, analysis_id)
             if analysis is None:
@@ -365,6 +380,7 @@ async def _run_analysis(analysis_id: UUID) -> None:
             )
             await session.commit()
     except Exception as exc:
+        # 失败也必须落库，避免前端一直停留在 analyzing 状态。
         error_message = str(exc).strip()[:2_000] or type(exc).__name__
         async with session_factory() as session:
             analysis = await session.get(AnalysisRecord, analysis_id)
@@ -389,6 +405,8 @@ def _report_markdown(
     result: AnalysisState,
     findings: list[dict[str, Any]],
 ) -> str:
+    """优先使用 Report Agent 的 Markdown，缺失时生成最小兜底报告。"""
+
     report_result = next(
         (
             item

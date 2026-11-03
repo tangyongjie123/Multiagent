@@ -9,6 +9,7 @@ export type AnalysisStatus =
 export type Severity = "critical" | "major" | "minor" | "info";
 export type FindingCategory = "architecture" | "test" | "security" | "quality";
 
+/** 用户提交分析的 Git 仓库。 */
 export interface Repository {
   id: string;
   url: string;
@@ -20,6 +21,7 @@ export interface Repository {
   updated_at: string;
 }
 
+/** 一次完整的仓库分析运行。 */
 export interface Analysis {
   id: string;
   repository_id: string;
@@ -37,11 +39,13 @@ export interface Analysis {
   completed_at: string | null;
 }
 
+/** 创建仓库后自动启动首次分析的响应。 */
 export interface RepositorySubmission {
   repository: Repository;
   analysis: Analysis;
 }
 
+/** SSE 与历史接口返回的持久化 Agent/工具事件。 */
 export interface AnalysisEvent {
   id: number;
   analysis_id: string;
@@ -53,6 +57,7 @@ export interface AnalysisEvent {
   created_at: string;
 }
 
+/** 可定位、可排序的代码审查问题。 */
 export interface Finding {
   id: string;
   analysis_id: string;
@@ -67,6 +72,7 @@ export interface Finding {
   created_at: string;
 }
 
+/** 报告、图表或中间 JSON 产物的元数据。 */
 export interface Artifact {
   id: string;
   analysis_id: string;
@@ -77,11 +83,13 @@ export interface Artifact {
   created_at: string;
 }
 
+/** 单个依赖服务的健康状态。 */
 export interface HealthComponent {
   status: "ok" | "not_configured" | "error";
   detail: string | null;
 }
 
+/** FastAPI 汇总的依赖服务健康状态。 */
 export interface HealthResult {
   status: "ok" | "degraded";
   version: string;

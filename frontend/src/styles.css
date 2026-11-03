@@ -1,3 +1,4 @@
+/* ---------- 基础主题与页面骨架 ---------- */
 :root {
   color: #171a18;
   background: #f2f0e9;
@@ -41,6 +42,7 @@ button {
   padding: 0 26px 36px;
 }
 
+/* ---------- 顶部品牌与依赖状态 ---------- */
 .masthead {
   display: flex;
   min-height: 86px;
@@ -168,6 +170,7 @@ button {
   font-size: 18px;
 }
 
+/* ---------- 左侧仓库创建与历史栏 ---------- */
 .layout {
   display: grid;
   grid-template-columns: 330px minmax(0, 1fr);
@@ -203,6 +206,7 @@ button {
   color: #9a9d97;
 }
 
+/* ---------- 表单和按钮 ---------- */
 .repo-form,
 .repo-form label {
   display: grid;
@@ -342,6 +346,7 @@ button:disabled {
   text-transform: uppercase;
 }
 
+/* ---------- 主工作区标题与指标 ---------- */
 .workspace {
   min-width: 0;
   padding: 34px 0 0 34px;
@@ -465,6 +470,7 @@ button:disabled {
   font-size: 14px !important;
 }
 
+/* ---------- 主 Agent 和专业 Agent 进度 ---------- */
 .agent-track {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -526,6 +532,7 @@ button:disabled {
   animation: pulse 1.3s infinite;
 }
 
+/* ---------- 分类评估图表 ---------- */
 .assessment-overview {
   display: grid;
   grid-template-columns: minmax(300px, 0.8fr) minmax(420px, 1.2fr);
@@ -709,6 +716,7 @@ button:disabled {
   background: #668b78;
 }
 
+/* ---------- 分析历史与页签 ---------- */
 .history-strip {
   display: flex;
   gap: 6px;
@@ -780,6 +788,7 @@ button:disabled {
   padding-top: 20px;
 }
 
+/* ---------- 问题筛选和分类详情 ---------- */
 .filter-row {
   display: flex;
   flex-wrap: wrap;
@@ -949,6 +958,7 @@ button:disabled {
   background: #f3eee1;
 }
 
+/* ---------- 事件时间线 ---------- */
 .timeline {
   display: grid;
 }
@@ -997,6 +1007,7 @@ button:disabled {
   line-height: 1.55;
 }
 
+/* ---------- HTML/Markdown 报告区域 ---------- */
 .report-toolbar {
   display: flex;
   align-items: center;
@@ -1020,6 +1031,7 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+/* ---------- 空状态和首屏 ---------- */
 .empty-state {
   padding: 40px;
   color: #777b74;
@@ -1063,6 +1075,7 @@ button:disabled {
   }
 }
 
+/* ---------- 响应式布局 ---------- */
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 280px minmax(0, 1fr);

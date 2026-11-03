@@ -11,11 +11,13 @@ import type {
 const runtimeHost =
   typeof window === "undefined" ? "localhost" : window.location.hostname;
 
+// 可通过 VITE_API_BASE_URL 覆盖，默认访问同主机的 FastAPI 8000 端口。
 export const API_BASE = (
   import.meta.env.VITE_API_BASE_URL ?? `${window.location.protocol}//${runtimeHost}:8000`
 ).replace(/\/$/, "");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // 统一处理 JSON 响应和非 2xx 错误，页面只关注业务数据。
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",

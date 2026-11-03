@@ -18,6 +18,8 @@ router = APIRouter(tags=["health"])
 
 
 def _check_milvus_sync() -> None:
+    """Milvus SDK 为同步客户端，因此在工作线程中执行检查。"""
+
     from pymilvus import MilvusClient  # type: ignore[import-untyped]
 
     settings = get_settings()
@@ -35,6 +37,8 @@ def _check_milvus_sync() -> None:
 
 
 async def _database_component() -> HealthComponent:
+    """检查 PostgreSQL 是否可用。"""
+
     settings = get_settings()
     if not settings.postgres_configured:
         return HealthComponent(status="not_configured", detail="POSTGRES_PASSWORD 未配置")
@@ -46,6 +50,8 @@ async def _database_component() -> HealthComponent:
 
 
 async def _milvus_component() -> HealthComponent:
+    """检查 Milvus 连接，不在这里创建集合或写入数据。"""
+
     settings = get_settings()
     if not settings.milvus_configured:
         return HealthComponent(status="not_configured")
@@ -57,6 +63,8 @@ async def _milvus_component() -> HealthComponent:
 
 
 async def _neo4j_component() -> HealthComponent:
+    """检查 Neo4j Bolt 连接。"""
+
     settings = get_settings()
     if not settings.neo4j_configured or settings.neo4j_password is None:
         return HealthComponent(status="not_configured")
@@ -72,6 +80,8 @@ async def _http_auth_component(
     api_key: str | None,
     url: str | None,
 ) -> HealthComponent:
+    """通过只读模型接口检查 API Key 是否有效。"""
+
     if not api_key or not url:
         return HealthComponent(status="not_configured")
     try:
@@ -88,6 +98,8 @@ async def _http_auth_component(
 
 
 def _checkpoint_component() -> HealthComponent:
+    """确认 LangGraph checkpointer 已初始化。"""
+
     settings = get_settings()
     if not settings.postgres_configured:
         return HealthComponent(status="not_configured")

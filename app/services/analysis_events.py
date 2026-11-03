@@ -20,7 +20,10 @@ async def append_analysis_event(
     message: str,
     data: dict[str, Any] | None = None,
 ) -> AnalysisEventRecord:
-    """按分析内顺序追加事件。"""
+    """按单个分析内的单调递增序号追加事件。
+
+    调用方负责提交事务；本函数只 flush，便于与状态更新处于同一事务。
+    """
 
     current_sequence = await session.scalar(
         select(func.coalesce(func.max(AnalysisEventRecord.sequence), 0)).where(
