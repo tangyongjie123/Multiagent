@@ -27,6 +27,12 @@ def _build_workspace(tmp_path: Path) -> Path:
         'class DemoService { String password = "super-secret-value"; }\n',
         encoding="utf-8",
     )
+    model = root / "model"
+    model.mkdir()
+    (model / "config.php").write_text(
+        "<?php return ['database' => 'demo'];\n",
+        encoding="utf-8",
+    )
     test = root / "src/test/java/example"
     test.mkdir(parents=True)
     (test / "DemoServiceTest.java").write_text(
@@ -36,6 +42,7 @@ def _build_workspace(tmp_path: Path) -> Path:
     ignored = root / "node_modules/pkg"
     ignored.mkdir(parents=True)
     (ignored / "index.js").write_text("const ignored = true;", encoding="utf-8")
+    (root / "preview.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     return root
 
 
@@ -79,6 +86,17 @@ async def test_mcp_tools_read_search_and_redact(
     assert test_result["matches"][0]["file_path"].endswith("DemoServiceTest.java")
     assert "node_modules/pkg/index.js" not in tree_result["entries"]
 
+    php_result = await mcp_server_module.read_repository_file(
+        str(analysis_id),
+        "model/config.php",
+    )
+    binary_result = await mcp_server_module.read_repository_file(
+        str(analysis_id),
+        "preview.png",
+    )
+    assert "database" in php_result["content"]
+    assert binary_result["error"] == "MCP 只允许读取源码、配置和构建文本文件"
+
 
 @pytest.mark.asyncio
 async def test_mcp_tools_reject_path_escape(
@@ -94,11 +112,11 @@ async def test_mcp_tools_reject_path_escape(
         lambda _: root,
     )
 
-    with pytest.raises(ValueError, match="超出分析工作区"):
-        await mcp_server_module.read_repository_file(
-            str(uuid4()),
-            "../outside.txt",
-        )
+    result = await mcp_server_module.read_repository_file(
+        str(uuid4()),
+        "../outside.txt",
+    )
+    assert "超出分析工作区" in result["error"]
 
 
 @pytest.mark.asyncio

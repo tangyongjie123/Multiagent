@@ -32,6 +32,9 @@ CODE_EXTENSIONS = {
     ".java": "Java",
     ".kt": "Kotlin",
     ".py": "Python",
+    ".php": "PHP",
+    ".rb": "Ruby",
+    ".vue": "Vue",
     ".ts": "TypeScript",
     ".tsx": "TypeScript",
     ".js": "JavaScript",
@@ -39,6 +42,17 @@ CODE_EXTENSIONS = {
     ".go": "Go",
     ".rs": "Rust",
     ".cs": "C#",
+    ".c": "C",
+    ".h": "C/C++",
+    ".cpp": "C++",
+    ".hpp": "C++",
+    ".html": "HTML",
+    ".htm": "HTML",
+    ".css": "CSS",
+    ".scss": "SCSS",
+    ".sass": "Sass",
+    ".less": "Less",
+    ".md": "Markdown",
     ".xml": "XML",
     ".yml": "YAML",
     ".yaml": "YAML",
@@ -46,11 +60,16 @@ CODE_EXTENSIONS = {
 SOURCE_EXTENSIONS = {
     *CODE_EXTENSIONS,
     ".properties",
+    ".gradle",
+    ".kts",
     ".json",
     ".toml",
     ".env",
     ".sh",
+    ".bat",
+    ".ps1",
     ".sql",
+    ".txt",
 }
 BUILD_FILES = {
     "pom.xml",
@@ -62,6 +81,20 @@ BUILD_FILES = {
     "requirements.txt",
     "go.mod",
     "Cargo.toml",
+}
+READABLE_FILE_NAMES = {
+    *BUILD_FILES,
+    "Dockerfile",
+    "Makefile",
+    "Jenkinsfile",
+    ".gitignore",
+    ".gitattributes",
+    ".dockerignore",
+    "LICENSE",
+    "mvnw",
+    "mvnw.cmd",
+    "gradlew",
+    "gradlew.bat",
 }
 SAFE_BRANCH = re.compile(r"^[A-Za-z0-9._/-]+$")
 
@@ -249,7 +282,19 @@ def _scan_repository_sync(root: Path) -> RepositorySnapshot:
         if language:
             language_counts[language] += 1
         lowered = relative_text.lower()
-        if any(part in lowered for part in ("/test/", "test.java", "spec.")):
+        if any(
+            part in lowered
+            for part in (
+                "/test/",
+                "/tests/",
+                "test.java",
+                "tests.py",
+                "_test.py",
+                ".test.",
+                ".spec.",
+                "test.php",
+            )
+        ):
             test_files.append(relative_text)
         if path.name.endswith("Application.java") or path.name in {
             "main.py",

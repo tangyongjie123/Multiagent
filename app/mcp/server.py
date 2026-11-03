@@ -11,8 +11,8 @@ from uuid import UUID
 from mcp.server.mcpserver import MCPServer
 
 from app.services.repository import (
-    BUILD_FILES,
     IGNORED_DIRECTORIES,
+    READABLE_FILE_NAMES,
     SOURCE_EXTENSIONS,
     repository_workspace,
     scan_repository,
@@ -72,7 +72,17 @@ async def read_repository_file(
     """读取工作区文本文件，并限制行数和返回长度。"""
 
     root = await asyncio.to_thread(_repository_root, analysis_id)
-    file_path = await asyncio.to_thread(_safe_file, root, path)
+    try:
+        file_path = await asyncio.to_thread(_safe_file, root, path)
+    except (OSError, ValueError) as exc:
+        # 非法文件类型或路径应作为可纠正的工具结果返回给模型，
+        # 不能让一次读文件失败直接终止整个 Agent。
+        return {
+            "path": path,
+            "content": "",
+            "error": str(exc),
+            "truncated": False,
+        }
     content = await asyncio.to_thread(_read_text, file_path)
     lines = _redact(content).splitlines()
     start = max(1, min(start_line, len(lines) or 1))
@@ -219,7 +229,10 @@ def _safe_file(root: Path, relative_path: str) -> Path:
         raise ValueError("指定路径不是文件")
     if candidate.stat().st_size > MAX_READ_BYTES:
         raise ValueError("文件超过 MCP 读取大小限制")
-    if candidate.suffix.lower() not in SOURCE_EXTENSIONS and candidate.name not in BUILD_FILES:
+    if (
+        candidate.suffix.lower() not in SOURCE_EXTENSIONS
+        and candidate.name not in READABLE_FILE_NAMES
+    ):
         raise ValueError("MCP 只允许读取源码、配置和构建文本文件")
     return candidate
 
@@ -241,7 +254,10 @@ def _search_files(
     needle = query if case_sensitive else query.casefold()
     matches: list[dict[str, Any]] = []
     for path in _iter_files(root):
-        if path.suffix.lower() not in SOURCE_EXTENSIONS and path.name not in BUILD_FILES:
+        if (
+            path.suffix.lower() not in SOURCE_EXTENSIONS
+            and path.name not in READABLE_FILE_NAMES
+        ):
             continue
         if path.stat().st_size > MAX_READ_BYTES:
             continue
@@ -273,7 +289,16 @@ def _find_tests(root: Path, target: str, limit: int) -> list[dict[str, Any]]:
         relative = path.relative_to(root).as_posix()
         lowered = relative.lower()
         is_test = "/test/" in lowered or lowered.endswith(
-            ("test.java", "tests.py", "spec.ts", "spec.js")
+            (
+                "test.java",
+                "tests.py",
+                "_test.py",
+                "test.php",
+                "spec.ts",
+                "spec.js",
+                ".test.ts",
+                ".test.js",
+            )
         )
         if not is_test:
             continue

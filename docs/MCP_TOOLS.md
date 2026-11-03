@@ -44,12 +44,16 @@ MCP 服务挂载在 FastAPI 应用内，与 Web API 共用进程和端口。客�
 - 路径解析后必须仍位于对应分析目录内。
 - 禁止路径穿越、绝对路径、空字节和指向目录外部的软链接。
 - 只读取源码、配置和构建文本文件。
+- 支持 Java、Kotlin、Python、PHP、Ruby、Vue、TypeScript、JavaScript、Go、Rust、C/C++、HTML、CSS、SCSS、Markdown、XML、YAML 等文本类型。
+- 支持 Dockerfile、Makefile、Jenkinsfile、Maven/Gradle Wrapper 和常见点文件。
 - 单文件最大 2 MB。
 - 单次工具输出最多 100,000 字符。
 - 默认单次调用超时 20 秒。
 - 单个 Agent 默认最多调用 3 次工具。
 - 返回内容会脱敏密码、API Key、Token、URL 凭证和私钥。
 - 不提供 Shell、任意 HTTP 请求、文件写入或目标仓库执行工具。
+
+如果模型请求不支持的文件类型、越界路径或不存在文件，`read_repository_file` 会返回带 `error` 字段的结构化结果，而不是抛出致命异常。模型可以根据错误和允许工具列表重新选择文件。
 
 ## 5. 事件
 

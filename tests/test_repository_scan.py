@@ -77,12 +77,16 @@ async def test_repository_snapshot_detects_spring_project(tmp_path: Path) -> Non
         "server:\n  port: 8080\n",
         encoding="utf-8",
     )
+    php = tmp_path / "model"
+    php.mkdir()
+    (php / "config.php").write_text("<?php return [];", encoding="utf-8")
 
     snapshot = await scan_repository(tmp_path)
 
-    assert snapshot.file_count == 4
+    assert snapshot.file_count == 5
     assert snapshot.languages["Java"] == 2
     assert "pom.xml" in snapshot.build_files
     assert snapshot.test_files
     assert snapshot.spring_indicators
     assert "src/main/resources/application.yml" in snapshot.source_files
+    assert snapshot.languages["PHP"] == 1
