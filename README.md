@@ -50,6 +50,24 @@ Git URL
 | 前端 | React 19、TypeScript、Vite |
 | 外部服务 | Milvus、Neo4j、DashScope/DeepSeek |
 
+## Service 层
+
+`app/services/` 负责实际业务执行，不处理 HTTP 响应：
+
+- `repository.py`：Git 浅克隆、路径校验和仓库扫描。
+- `analysis_runner.py`：从克隆到 Agent 调度、报告落库的完整流程。
+- `static_analysis.py`：确定性安全与质量规则。
+- `analysis_events.py`：Agent 和工具事件持久化。
+- `report_visuals.py`：严重级别图、分类图、Markdown 和 HTML 报告。
+
+调用链为：
+
+```text
+FastAPI 路由 -> Service -> Git/文件系统/PostgreSQL/MCP/LangGraph
+```
+
+Service 执行副作用，主 Agent 只负责选择下一个分析角色。
+
 ## 快速启动
 
 项目绑定以下 Conda 环境：
@@ -117,12 +135,13 @@ app/
 docs/
   ARCHITECTURE.md            系统架构与执行流程
   ANALYSIS_MODEL.md          Agent 职责、状态机和问题模型
+  AGENT_PROMPTS.md           模型提示词与主 Agent 路由说明
   DATABASE.md                PostgreSQL 数据模型
   DEPENDENCIES.md            Python 与前端依赖
   ENVIRONMENT_VARIABLES.md   环境变量和外部服务
   FRONTEND.md                前端设计与运行说明
   GRAPH_DATABASE.md          Neo4j 图谱设计
-  IMPLEMENTATION_STATUS.md   当前完成度与限制
+  MCP_TOOLS.md               MCP 只读工具与权限
   PROJECT_REQUIREMENTS.md    产品范围和验收标准
 frontend/       React 可视化控制台
 scripts/        启动和 Neo4j 验证脚本
@@ -139,10 +158,8 @@ tests/          Python 自动化测试
 - [依赖与运行环境](docs/DEPENDENCIES.md)
 - [环境变量](docs/ENVIRONMENT_VARIABLES.md)
 - [PostgreSQL 设计](docs/DATABASE.md)
-- [PostgreSQL 数据维护](docs/DATABASE_MAINTENANCE.md)
 - [Neo4j 图谱设计](docs/GRAPH_DATABASE.md)
 - [前端说明](docs/FRONTEND.md)
-- [实现状态](docs/IMPLEMENTATION_STATUS.md)
 
 ## 安全边界
 

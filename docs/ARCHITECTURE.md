@@ -61,6 +61,36 @@ Milvus 和 Neo4j 已完成配置、健康检查与基础连接生命周期，但
 | `app/graph/` | Neo4j 驱动、约束和健康检查 |
 | `app/core/` | 配置、日志和运行参数 |
 
+## 2.1 Service 层职责
+
+`app/services/` 是业务服务层，负责执行完整任务并协调文件系统、数据库、MCP 和 Agent。API 路由只处理 HTTP 请求和响应，Agent 只负责判断与分析，具体副作用由 Service 统一执行。
+
+```text
+FastAPI 路由
+  -> Service 业务编排
+  -> Git / 文件系统 / PostgreSQL / MCP / LangGraph
+```
+
+| 文件 | 职责 |
+| --- | --- |
+| `repository.py` | URL 白名单、Git 路径定位、浅克隆、仓库扫描和进程清理 |
+| `analysis_runner.py` | 完整分析流程、取消、心跳、恢复、产物写入和最终状态更新 |
+| `static_analysis.py` | 可复现的凭证、命令执行、异常和日志规则 |
+| `analysis_events.py` | 单个分析内的事件序号和持久化 |
+| `report_visuals.py` | SVG 图表、内嵌图片 Markdown 和自包含 HTML 报告 |
+
+一次“开始分析”请求的 Service 调用步骤：
+
+1. `api/routes/repositories.py` 创建仓库和分析记录。
+2. `analysis_runner.py` 启动后台任务并更新运行状态。
+3. `repository.py` 完成浅克隆和受限扫描。
+4. `analysis_runner.py` 调用 LangGraph 主 Agent 和专业 Agent。
+5. Agent 通过 MCP 调用静态规则、文件读取和搜索能力。
+6. `report_visuals.py` 生成 Markdown、HTML 与 SVG。
+7. Service 在同一事务中保存问题、产物和最终状态。
+
+Service 不决定“下一步分析谁”，该职责属于主 Agent；Service 也不直接接受 HTTP 参数，该职责属于 API 层。
+
 ## 3. 一次分析的时序
 
 ```mermaid
