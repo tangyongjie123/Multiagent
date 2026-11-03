@@ -2,14 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ANALYSIS_AGENT_ORDER, AGENT_SHORT_LABELS } from "./agentMeta";
 import { api } from "./api";
+import { ChatWorkspace } from "./ChatWorkspace";
 import { ExecutionDetails } from "./ExecutionDetails";
 import type {
   Analysis,
   AnalysisEvent,
   Artifact,
-  ChatCitation,
-  ChatEvent,
-  ChatMessage,
   Finding,
   FindingCategory,
   HealthResult,
@@ -34,16 +32,6 @@ const STREAM_EVENTS = [
   "analysis.cancelled",
   "analysis.interrupted",
 ];
-const CHAT_STREAM_EVENTS = [
-  "chat.turn.queued",
-  "chat.turn.started",
-  "chat.main.decision",
-  "chat.agent.started",
-  "chat.agent.completed",
-  "chat.agent.failed",
-  "chat.completed",
-  "chat.failed",
-];
 const SEVERITIES: Severity[] = ["critical", "major", "minor", "info"];
 const SEVERITY_LABELS: Record<Severity, string> = {
   critical: "严重",
@@ -57,12 +45,13 @@ const SEVERITY_COLORS: Record<Severity, string> = {
   minor: "#c6a52c",
   info: "#7d978a",
 };
-const CATEGORIES: Array<{ key: FindingCategory; label: string; note: string }> = [
-  { key: "architecture", label: "架构", note: "分层、模块与依赖" },
-  { key: "test", label: "测试", note: "测试缺口与关联性" },
-  { key: "security", label: "安全", note: "凭证与危险调用" },
-  { key: "quality", label: "质量", note: "异常、日志与维护性" },
-];
+const CATEGORIES: Array<{ key: FindingCategory; label: string; note: string }> =
+  [
+    { key: "architecture", label: "架构", note: "分层、模块与依赖" },
+    { key: "test", label: "测试", note: "测试缺口与关联性" },
+    { key: "security", label: "安全", note: "凭证与危险调用" },
+    { key: "quality", label: "质量", note: "异常、日志与维护性" },
+  ];
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -84,13 +73,19 @@ function formatDuration(milliseconds: number): string {
 
 function statusClass(status: string): string {
   if (["completed", "ok"].includes(status)) return "state state-good";
-  if (["failed", "error", "cancelled"].includes(status)) return "state state-bad";
-  if (["analyzing", "cloning", "pending"].includes(status)) return "state state-live";
+  if (["failed", "error", "cancelled"].includes(status))
+    return "state state-bad";
+  if (["analyzing", "cloning", "pending"].includes(status))
+    return "state state-live";
   return "state";
 }
 
 function repoShortName(repository: Repository): string {
-  return repository.url.replace(/\.git$/, "").split("/").slice(-2).join("/");
+  return repository.url
+    .replace(/\.git$/, "")
+    .split("/")
+    .slice(-2)
+    .join("/");
 }
 
 export default function App() {
@@ -106,8 +101,9 @@ export default function App() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [report, setReport] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "findings" | "timeline" | "chat" | "report"
+    "findings" | "timeline" | "report"
   >("findings");
+  const [chatOpen, setChatOpen] = useState(false);
   const [severityFilter, setSeverityFilter] = useState<Severity | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<FindingCategory | "all">(
     "all",
@@ -118,15 +114,6 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [clock, setClock] = useState(Date.now());
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
-  const [chatSessionId, setChatSessionId] = useState("");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatEvents, setChatEvents] = useState<ChatEvent[]>([]);
-  const [chatCitations, setChatCitations] = useState<
-    Record<string, ChatCitation[]>
-  >({});
-  const [chatInput, setChatInput] = useState("");
-  const [chatRunning, setChatRunning] = useState(false);
-  const [chatEventCursor, setChatEventCursor] = useState(0);
 
   const selectedRepository = useMemo(
     () => repositories.find((item) => item.id === selectedRepositoryId) ?? null,
@@ -199,7 +186,6 @@ export default function App() {
   const streamEnabled =
     analysis?.id === selectedAnalysisId &&
     ["pending", "cloning", "analyzing"].includes(analysis.status);
-  const latestChatEvent = chatEvents[chatEvents.length - 1];
 
   async function loadAnalysis(analysisId: string): Promise<Analysis> {
     // 完成、失败或取消后加载最新问题与产物快照。
@@ -226,13 +212,7 @@ export default function App() {
     setReport("");
     setSeverityFilter("all");
     setCategoryFilter("all");
-    setChatSessionId("");
-    setChatMessages([]);
-    setChatEvents([]);
-    setChatCitations({});
-    setChatInput("");
-    setChatRunning(false);
-    setChatEventCursor(0);
+    setChatOpen(false);
     setEvents(await api.events(analysisId));
     await loadAnalysis(analysisId);
   }
@@ -244,13 +224,7 @@ export default function App() {
     setFindings([]);
     setArtifacts([]);
     setReport("");
-    setChatSessionId("");
-    setChatMessages([]);
-    setChatEvents([]);
-    setChatCitations({});
-    setChatInput("");
-    setChatRunning(false);
-    setChatEventCursor(0);
+    setChatOpen(false);
     const history = await api.analyses(repositoryId);
     setAnalyses(history);
     if (history[0]) {
@@ -306,56 +280,15 @@ export default function App() {
     };
   }, [selectedAnalysisId, streamEnabled]);
 
-  useEffect(() => {
-    if (!chatSessionId || !chatRunning) return;
-    const stream = new EventSource(
-      api.chatEventStreamUrl(chatSessionId, chatEventCursor),
-    );
-    const refresh = async () => {
-      const messages = await api.chatMessages(chatSessionId);
-      setChatMessages(messages);
-      const completed = messages.filter(
-        (message) =>
-          message.role === "assistant" && message.status === "completed",
-      );
-      const entries = await Promise.all(
-        completed.map(async (message) => [
-          message.id,
-          await api.chatCitations(message.id),
-        ] as const),
-      );
-      setChatCitations(Object.fromEntries(entries));
-    };
-    const onEvent = (message: MessageEvent<string>) => {
-      const event = JSON.parse(message.data) as ChatEvent;
-      setChatEvents((current) =>
-        current.some((item) => item.id === event.id)
-          ? current
-          : [...current, event].sort((a, b) => a.sequence - b.sequence),
-      );
-      void refresh();
-      if (["chat.completed", "chat.failed"].includes(event.event_type)) {
-        setChatRunning(false);
-        stream.close();
-      }
-    };
-    for (const eventName of CHAT_STREAM_EVENTS) {
-      stream.addEventListener(eventName, onEvent as EventListener);
-    }
-    return () => {
-      for (const eventName of CHAT_STREAM_EVENTS) {
-        stream.removeEventListener(eventName, onEvent as EventListener);
-      }
-      stream.close();
-    };
-  }, [chatSessionId, chatEventCursor, chatRunning]);
-
   async function submitRepository(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const result = await api.createRepository(repoUrl.trim(), branch.trim() || null);
+      const result = await api.createRepository(
+        repoUrl.trim(),
+        branch.trim() || null,
+      );
       setRepositories((current) => [
         result.repository,
         ...current.filter((item) => item.id !== result.repository.id),
@@ -406,44 +339,6 @@ export default function App() {
     }
   }
 
-  async function sendChatMessage(event: React.FormEvent) {
-    event.preventDefault();
-    const content = chatInput.trim();
-    if (!content || !selectedRepository || !analysis) return;
-    if (analysis.status !== "completed") {
-      setError("请先完成一次仓库分析，再向 AI 提问。");
-      return;
-    }
-    setChatRunning(true);
-    setChatEventCursor(
-      chatEvents.length > 0 ? chatEvents[chatEvents.length - 1].sequence : 0,
-    );
-    setError("");
-    try {
-      let sessionId = chatSessionId;
-      if (!sessionId) {
-        const chatSession = await api.createChatSession(
-          selectedRepository.id,
-          analysis.id,
-          `${selectedRepository.name} 审查对话`,
-        );
-        sessionId = chatSession.id;
-        setChatSessionId(sessionId);
-        setChatEvents([]);
-      }
-      const turn = await api.sendChatMessage(sessionId, content);
-      setChatMessages((current) => [
-        ...current,
-        turn.user_message,
-        turn.assistant_message,
-      ]);
-      setChatInput("");
-    } catch (requestError) {
-      setChatRunning(false);
-      setError(String(requestError));
-    }
-  }
-
   function downloadMarkdownReport() {
     if (!analysis) return;
     const anchor = document.createElement("a");
@@ -469,14 +364,33 @@ export default function App() {
             <small>AI CODE REVIEW</small>
           </span>
         </a>
-        <div className="system-state">
-          {health &&
-            Object.entries(health.components).map(([name, component]) => (
-              <span className={statusClass(component.status)} key={name}>
-                <i />
-                {name}
-              </span>
-            ))}
+        <div className="masthead-actions">
+          <button
+            className={`assistant-entry${chatOpen ? " active" : ""}`}
+            disabled={!selectedRepository}
+            onClick={() => setChatOpen((current) => !current)}
+            title={
+              selectedRepository
+                ? "打开当前仓库的 AI 助手"
+                : "请先选择或提交一个仓库"
+            }
+            type="button"
+          >
+            <span>✦</span>
+            <div>
+              <strong>{chatOpen ? "返回审查" : "AI 助手"}</strong>
+              <small>Evidence chat</small>
+            </div>
+          </button>
+          <div className="system-state">
+            {health &&
+              Object.entries(health.components).map(([name, component]) => (
+                <span className={statusClass(component.status)} key={name}>
+                  <i />
+                  {name}
+                </span>
+              ))}
+          </div>
         </div>
       </header>
 
@@ -490,581 +404,523 @@ export default function App() {
         </div>
       )}
 
-      <div className="layout">
-        {/* 左侧负责创建分析、选择仓库。 */}
-        <aside className="rail">
-          <section className="rail-section">
-            <div className="section-kicker">
-              <span>New analysis</span>
-              <b>01</b>
-            </div>
-            <form className="repo-form" onSubmit={submitRepository}>
-              <label>
-                Git repository
-                <input
-                  onChange={(event) => setRepoUrl(event.target.value)}
-                  placeholder="https://github.com/org/repo.git"
-                  required
-                  value={repoUrl}
-                />
-              </label>
-              <label>
-                Branch
-                <input
-                  onChange={(event) => setBranch(event.target.value)}
-                  placeholder="main（可留空）"
-                  value={branch}
-                />
-              </label>
-              <button className="solid-button" disabled={busy} type="submit">
-                {busy ? "正在提交..." : "开始分析"}
-              </button>
-              <p className="fine-print">
-                MVP 支持 GitHub、GitLab、Gitee 的公开仓库，只做只读静态分析。
-              </p>
-            </form>
-          </section>
-
-          <section className="rail-section repositories">
-            <div className="section-kicker">
-              <span>Repositories</span>
-              <b>{repositories.length.toString().padStart(2, "0")}</b>
-            </div>
-            <div className="repo-list">
-              {repositories.map((repository) => (
-                <button
-                  className={
-                    repository.id === selectedRepositoryId
-                      ? "repo-card selected"
-                      : "repo-card"
-                  }
-                  key={repository.id}
-                  onClick={() => void selectRepository(repository.id)}
-                  type="button"
-                >
-                  <span className="repo-provider">{repository.provider}</span>
-                  <strong>{repoShortName(repository)}</strong>
-                  <small>{formatDate(repository.created_at)}</small>
+      {chatOpen ? (
+        <ChatWorkspace
+          analysis={analysis}
+          onClose={() => setChatOpen(false)}
+          repository={selectedRepository}
+        />
+      ) : (
+        <div className="layout">
+          {/* 左侧负责创建分析、选择仓库。 */}
+          <aside className="rail">
+            <section className="rail-section">
+              <div className="section-kicker">
+                <span>New analysis</span>
+                <b>01</b>
+              </div>
+              <form className="repo-form" onSubmit={submitRepository}>
+                <label>
+                  Git repository
+                  <input
+                    onChange={(event) => setRepoUrl(event.target.value)}
+                    placeholder="https://github.com/org/repo.git"
+                    required
+                    value={repoUrl}
+                  />
+                </label>
+                <label>
+                  Branch
+                  <input
+                    onChange={(event) => setBranch(event.target.value)}
+                    placeholder="main（可留空）"
+                    value={branch}
+                  />
+                </label>
+                <button className="solid-button" disabled={busy} type="submit">
+                  {busy ? "正在提交..." : "开始分析"}
                 </button>
-              ))}
-            </div>
-          </section>
-        </aside>
+                <p className="fine-print">
+                  MVP 支持 GitHub、GitLab、Gitee 的公开仓库，只做只读静态分析。
+                </p>
+              </form>
+            </section>
 
-        <section className="workspace">
-          {selectedRepository ? (
-            <>
-              {/* 仓库标题、主要操作和实时状态概览。 */}
-              <div className="repo-heading">
-                <div>
-                  <p className="eyebrow">REPOSITORY REVIEW</p>
-                  <h1>{repoShortName(selectedRepository)}</h1>
-                  <a href={selectedRepository.url} rel="noreferrer" target="_blank">
-                    {selectedRepository.url}
-                  </a>
-                </div>
-                <div className="heading-actions">
-                  {analysis?.status === "completed" && (
-                    <button
-                      className="download-button"
-                      onClick={downloadMarkdownReport}
-                      type="button"
-                    >
-                      下载 Markdown
-                    </button>
-                  )}
-                  {analysis?.status === "completed" && hasHtmlReport && (
-                    <button
-                      className="outline-button"
-                      onClick={downloadHtmlReport}
-                      type="button"
-                    >
-                      下载 HTML
-                    </button>
-                  )}
-                  <button className="outline-button" disabled={busy} onClick={startAnalysis}>
-                    重新分析
-                  </button>
-                  {analysis && ["pending", "cloning", "analyzing"].includes(analysis.status) && (
-                    <button className="stop-button" disabled={busy} onClick={cancelAnalysis}>
-                      停止
-                    </button>
-                  )}
-                </div>
+            <section className="rail-section repositories">
+              <div className="section-kicker">
+                <span>Repositories</span>
+                <b>{repositories.length.toString().padStart(2, "0")}</b>
               </div>
-
-              <div className="status-grid">
-                <article className="metric hero-metric">
-                  <span>Analysis status</span>
-                  <strong className={statusClass(analysis?.status ?? "pending")}>
-                    {analysis?.status ?? "等待分析"}
-                  </strong>
-                  <small>
-                    {analysis?.summary ??
-                      analysis?.error_message ??
-                      "选择历史运行或启动新分析"}
-                  </small>
-                </article>
-                <article className="metric">
-                  <span>Elapsed</span>
-                  <strong>{elapsed}</strong>
-                  <small>{analysis?.current_agent ?? "—"}</small>
-                </article>
-                <article className="metric">
-                  <span>Findings</span>
-                  <strong>{analysis?.finding_count ?? findings.length}</strong>
-                  <small>所有严重级别</small>
-                </article>
-                <article className="metric">
-                  <span>Commit</span>
-                  <strong className="mono">{analysis?.commit_sha?.slice(0, 8) ?? "—"}</strong>
-                  <small>{analysis?.branch ?? "默认分支"}</small>
-                </article>
-              </div>
-
-              <section className="agent-track">
-                {/* 主 Agent 与六个专业 Agent 的完成进度。 */}
-                {ANALYSIS_AGENT_ORDER.map((agent, index) => {
-                  const complete =
-                    (agent === "main" && analysis?.status === "completed") ||
-                    events.some(
-                      (event) =>
-                        event.agent === agent && event.event_type === "agent.completed",
-                    );
-                  const live = analysis?.current_agent === agent && analysis.status === "analyzing";
-                  return (
-                    <div
-                      className={`agent-step${complete ? " complete" : ""}${live ? " live" : ""}`}
-                      key={agent}
-                    >
-                      <span>{String(index).padStart(2, "0")}</span>
-                      <strong>{AGENT_SHORT_LABELS[agent]}</strong>
-                      <i />
-                    </div>
-                  );
-                })}
-              </section>
-
-              <section className="assessment-overview">
-                {/* 两类图表都直接由当前 findings 计算，刷新后保持同步。 */}
-                <article className="assessment-card severity-card">
-                  <div className="assessment-heading">
-                    <div>
-                      <span>RISK DISTRIBUTION</span>
-                      <h2>严重级别分布</h2>
-                    </div>
-                    <b>{findings.length.toString().padStart(2, "0")}</b>
-                  </div>
-                  <div className="severity-visual">
-                    <div
-                      aria-label={`共 ${findings.length} 个问题`}
-                      className="severity-donut"
-                      style={{ background: severityGradient }}
-                    >
-                      <div>
-                        <strong>{findings.length}</strong>
-                        <span>问题</span>
-                      </div>
-                    </div>
-                    <div className="severity-legend">
-                      {SEVERITIES.map((severity) => (
-                        <div key={severity}>
-                          <i style={{ background: SEVERITY_COLORS[severity] }} />
-                          <span>{SEVERITY_LABELS[severity]}</span>
-                          <b>{severityCounts[severity]}</b>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </article>
-
-                <article className="assessment-card category-card">
-                  <div className="assessment-heading">
-                    <div>
-                      <span>ISSUE CATEGORIES</span>
-                      <h2>分类评估</h2>
-                    </div>
-                    <b>{CATEGORIES.length.toString().padStart(2, "0")}</b>
-                  </div>
-                  <div className="category-bars">
-                    {CATEGORIES.map(({ key, label, note }) => {
-                      const count = categoryCounts[key];
-                      const percentage =
-                        findings.length > 0 ? (count / findings.length) * 100 : 0;
-                      return (
-                        <button
-                          className={categoryFilter === key ? "active" : ""}
-                          key={key}
-                          onClick={() =>
-                            setCategoryFilter((current) =>
-                              current === key ? "all" : key,
-                            )
-                          }
-                          type="button"
-                        >
-                          <span>
-                            <strong>{label}</strong>
-                            <small>{note}</small>
-                          </span>
-                          <span className="category-track">
-                            <i style={{ width: `${percentage}%` }} />
-                          </span>
-                          <b>{count}</b>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </article>
-              </section>
-
-              <div className="history-strip">
-                {analyses.map((item) => (
+              <div className="repo-list">
+                {repositories.map((repository) => (
                   <button
-                    className={item.id === selectedAnalysisId ? "active" : ""}
-                    key={item.id}
-                    onClick={() => void selectAnalysis(item.id)}
+                    className={
+                      repository.id === selectedRepositoryId
+                        ? "repo-card selected"
+                        : "repo-card"
+                    }
+                    key={repository.id}
+                    onClick={() => void selectRepository(repository.id)}
                     type="button"
                   >
-                    <span className={statusClass(item.status)}>{item.status}</span>
-                    <code>{item.id.slice(0, 8)}</code>
-                    <small>{formatDate(item.created_at)}</small>
+                    <span className="repo-provider">{repository.provider}</span>
+                    <strong>{repoShortName(repository)}</strong>
+                    <small>{formatDate(repository.created_at)}</small>
                   </button>
                 ))}
               </div>
+            </section>
+          </aside>
 
-              <div className="tabs">
-                <button
-                  className={activeTab === "findings" ? "active" : ""}
-                  onClick={() => setActiveTab("findings")}
-                >
-                  Findings <b>{findings.length}</b>
-                </button>
-                <button
-                  className={activeTab === "timeline" ? "active" : ""}
-                  onClick={() => setActiveTab("timeline")}
-                >
-                  Timeline <b>{events.length}</b>
-                </button>
-                <button
-                  className={activeTab === "chat" ? "active" : ""}
-                  onClick={() => setActiveTab("chat")}
-                >
-                  Ask AI
-                </button>
-                <button
-                  className={activeTab === "report" ? "active" : ""}
-                  onClick={() => setActiveTab("report")}
-                >
-                  Report
-                </button>
-              </div>
-
-              {activeTab === "findings" && (
-                <section className="tab-panel">
-                  {/* 分类和严重级别是独立筛选维度。 */}
-                  <div className="filter-row filter-row-labeled">
-                    <span className="filter-label">分类</span>
-                    <button
-                      className={categoryFilter === "all" ? "active" : ""}
-                      onClick={() => setCategoryFilter("all")}
-                      type="button"
+          <section className="workspace">
+            {selectedRepository ? (
+              <>
+                {/* 仓库标题、主要操作和实时状态概览。 */}
+                <div className="repo-heading">
+                  <div>
+                    <p className="eyebrow">REPOSITORY REVIEW</p>
+                    <h1>{repoShortName(selectedRepository)}</h1>
+                    <a
+                      href={selectedRepository.url}
+                      rel="noreferrer"
+                      target="_blank"
                     >
-                      全部
-                    </button>
-                    {CATEGORIES.map(({ key, label }) => (
-                      <button
-                        className={categoryFilter === key ? "active" : ""}
-                        key={key}
-                        onClick={() => setCategoryFilter(key)}
-                        type="button"
-                      >
-                        {label} {categoryCounts[key]}
-                      </button>
-                    ))}
+                      {selectedRepository.url}
+                    </a>
                   </div>
-                  <div className="filter-row filter-row-labeled">
-                    <span className="filter-label">级别</span>
-                    <button
-                      className={severityFilter === "all" ? "active" : ""}
-                      onClick={() => setSeverityFilter("all")}
-                      type="button"
-                    >
-                      全部 {findings.length}
-                    </button>
-                    {SEVERITIES.map((severity) => (
-                      <button
-                        className={severityFilter === severity ? "active" : ""}
-                        key={severity}
-                        onClick={() => setSeverityFilter(severity)}
-                        type="button"
-                      >
-                        {SEVERITY_LABELS[severity]} {severityCounts[severity]}
-                      </button>
-                    ))}
-                  </div>
-                  {groupedFindings.map((group, groupIndex) => (
-                    <section className="finding-category" key={group.key}>
-                      <header>
-                        <div>
-                          <span>
-                            {String(groupIndex + 1).padStart(2, "0")} / {group.note}
-                          </span>
-                          <h3>{group.label}评估</h3>
-                        </div>
-                        <b>{group.items.length}</b>
-                      </header>
-                      <div className="finding-list">
-                        {group.items.map((finding, index) => (
-                          <article
-                            className={`finding ${finding.severity}`}
-                            key={finding.id}
-                          >
-                            <div className="finding-index">
-                              {groupIndex + 1}.{String(index + 1).padStart(2, "0")}
-                            </div>
-                            <div className="finding-body">
-                              <div className="finding-head">
-                                <span>{SEVERITY_LABELS[finding.severity]}</span>
-                                <span>{group.label}</span>
-                                <code>
-                                  {finding.file_path ?? "项目级"}
-                                  {finding.line ? `:${finding.line}` : ""}
-                                </code>
-                              </div>
-                              <h3>{finding.title}</h3>
-                              <p>{finding.evidence}</p>
-                              <div className="finding-note">
-                                <strong>影响</strong>
-                                <span>{finding.impact}</span>
-                              </div>
-                              <div className="finding-note">
-                                <strong>建议</strong>
-                                <span>{finding.recommendation}</span>
-                              </div>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                  {visibleFindings.length === 0 && (
-                    <div className="empty-state">
-                      {analysis?.status === "completed"
-                        ? "当前筛选条件下没有发现问题。"
-                        : "分析完成后将在这里显示问题。"}
-                    </div>
-                  )}
-                </section>
-              )}
-
-              {activeTab === "timeline" && (
-                <section className="tab-panel">
-                  <div className="execution-mode">
-                    <div>
-                      <strong>详细执行过程</strong>
-                      <small>
-                        展开查看每个 Agent、路由和 MCP 工具的可观测步骤
-                      </small>
-                    </div>
-                    <label className="switch-control">
-                      <input
-                        checked={showExecutionDetails}
-                        onChange={(event) =>
-                          setShowExecutionDetails(event.target.checked)
-                        }
-                        type="checkbox"
-                      />
-                      <span />
-                      <b>{showExecutionDetails ? "已开启" : "已关闭"}</b>
-                    </label>
-                  </div>
-                  {showExecutionDetails ? (
-                    <ExecutionDetails
-                      analysisStatus={analysis?.status ?? "pending"}
-                      currentAgent={analysis?.current_agent ?? null}
-                      events={events}
-                      startedAt={analysis?.started_at ?? null}
-                    />
-                  ) : (
-                    <div className="timeline">
-                      {/* 简化时间线只保留事件顺序，详细数据由开关控制。 */}
-                      {events.map((event) => (
-                        <article key={event.id}>
-                          <span className="timeline-time">
-                            {analysis?.started_at
-                              ? `+${formatDuration(
-                                  Date.parse(event.created_at) -
-                                    Date.parse(analysis.started_at),
-                                )}`
-                              : "—"}
-                          </span>
-                          <i />
-                          <div>
-                            <div className="timeline-head">
-                              <strong>
-                                {AGENT_SHORT_LABELS[event.agent] ?? event.agent}
-                              </strong>
-                              <code>{event.event_type}</code>
-                            </div>
-                            <p>{event.message}</p>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              )}
-
-              {activeTab === "chat" && (
-                <section className="tab-panel chat-panel">
-                  <div className="chat-heading">
-                    <div>
-                      <span>EVIDENCE-BASED CHAT</span>
-                      <h2>向当前分析提问</h2>
-                    </div>
-                    <p>
-                      回答只使用当前仓库的分析结果和 Finding，不执行目标仓库代码。
-                    </p>
-                  </div>
-
-                  {analysis?.status !== "completed" ? (
-                    <div className="empty-state">
-                      请先完成一次仓库分析，再向 AI 提问。
-                    </div>
-                  ) : (
-                    <>
-                      <div className="chat-messages">
-                        {chatMessages.length === 0 && (
-                          <div className="chat-suggestions">
-                            {[
-                              "总结这个项目最严重的问题",
-                              "解释第一条安全问题的证据",
-                              "按优先级生成修复计划",
-                            ].map((suggestion) => (
-                              <button
-                                key={suggestion}
-                                onClick={() => setChatInput(suggestion)}
-                                type="button"
-                              >
-                                {suggestion}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {chatMessages.map((message) => (
-                          <article
-                            className={`chat-message ${message.role} ${message.status}`}
-                            key={message.id}
-                          >
-                            <div className="chat-message-meta">
-                              <strong>
-                                {message.role === "user" ? "你" : "RepoGraph AI"}
-                              </strong>
-                              <span>{formatDate(message.created_at)}</span>
-                            </div>
-                            <div className="chat-message-content">
-                              {message.status === "generating"
-                                ? "正在检索证据并生成回答…"
-                                : message.content}
-                            </div>
-                            {message.role === "assistant" &&
-                              chatCitations[message.id]?.length > 0 && (
-                                <div className="chat-citations">
-                                  <strong>引用证据</strong>
-                                  {chatCitations[message.id].map((citation) => (
-                                    <div key={citation.id}>
-                                      <code>
-                                        {citation.file_path ?? "项目级"}
-                                        {citation.line ? `:${citation.line}` : ""}
-                                      </code>
-                                      <p>{citation.excerpt}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                          </article>
-                        ))}
-                      </div>
-
-                      {chatRunning && latestChatEvent && (
-                        <div className="chat-progress">
-                          <i />
-                          <strong>
-                            {AGENT_SHORT_LABELS[latestChatEvent.agent] ??
-                              latestChatEvent.agent}
-                          </strong>
-                          <span>{latestChatEvent.message}</span>
-                        </div>
-                      )}
-
-                      <form className="chat-form" onSubmit={sendChatMessage}>
-                        <textarea
-                          disabled={chatRunning}
-                          onChange={(event) => setChatInput(event.target.value)}
-                          placeholder="例如：这个项目最严重的三个问题是什么？"
-                          rows={3}
-                          value={chatInput}
-                        />
-                        <button
-                          className="solid-button"
-                          disabled={chatRunning || !chatInput.trim()}
-                          type="submit"
-                        >
-                          {chatRunning ? "分析中..." : "发送问题"}
-                        </button>
-                      </form>
-                    </>
-                  )}
-                </section>
-              )}
-
-              {activeTab === "report" && (
-                <section className="tab-panel report-panel">
-                  <div className="report-toolbar">
-                    <span>{artifacts.length} artifacts</span>
-                    {analysis?.status === "completed" && hasHtmlReport && (
-                      <button
-                        className="outline-button"
-                        onClick={downloadHtmlReport}
-                        type="button"
-                      >
-                        下载 HTML 图文报告
-                      </button>
-                    )}
+                  <div className="heading-actions">
                     {analysis?.status === "completed" && (
                       <button
                         className="download-button"
                         onClick={downloadMarkdownReport}
                         type="button"
                       >
-                        下载 Markdown 报告
+                        下载 Markdown
                       </button>
                     )}
+                    {analysis?.status === "completed" && hasHtmlReport && (
+                      <button
+                        className="outline-button"
+                        onClick={downloadHtmlReport}
+                        type="button"
+                      >
+                        下载 HTML
+                      </button>
+                    )}
+                    <button
+                      className="outline-button"
+                      disabled={busy}
+                      onClick={startAnalysis}
+                    >
+                      重新分析
+                    </button>
+                    {analysis &&
+                      ["pending", "cloning", "analyzing"].includes(
+                        analysis.status,
+                      ) && (
+                        <button
+                          className="stop-button"
+                          disabled={busy}
+                          onClick={cancelAnalysis}
+                        >
+                          停止
+                        </button>
+                      )}
                   </div>
-                  {analysis?.status === "completed" && hasHtmlReport ? (
-                    /* 独立文档隔离报告样式，避免污染控制台 CSS。 */
-                    <iframe
-                      className="report-frame"
-                      src={api.reportHtmlUrl(analysis.id)}
-                      title="可视化审查报告"
-                    />
-                  ) : (
-                    <pre>{report || "分析完成后生成报告。"}</pre>
-                  )}
+                </div>
+
+                <div className="status-grid">
+                  <article className="metric hero-metric">
+                    <span>Analysis status</span>
+                    <strong
+                      className={statusClass(analysis?.status ?? "pending")}
+                    >
+                      {analysis?.status ?? "等待分析"}
+                    </strong>
+                    <small>
+                      {analysis?.summary ??
+                        analysis?.error_message ??
+                        "选择历史运行或启动新分析"}
+                    </small>
+                  </article>
+                  <article className="metric">
+                    <span>Elapsed</span>
+                    <strong>{elapsed}</strong>
+                    <small>{analysis?.current_agent ?? "—"}</small>
+                  </article>
+                  <article className="metric">
+                    <span>Findings</span>
+                    <strong>
+                      {analysis?.finding_count ?? findings.length}
+                    </strong>
+                    <small>所有严重级别</small>
+                  </article>
+                  <article className="metric">
+                    <span>Commit</span>
+                    <strong className="mono">
+                      {analysis?.commit_sha?.slice(0, 8) ?? "—"}
+                    </strong>
+                    <small>{analysis?.branch ?? "默认分支"}</small>
+                  </article>
+                </div>
+
+                <section className="agent-track">
+                  {/* 主 Agent 与六个专业 Agent 的完成进度。 */}
+                  {ANALYSIS_AGENT_ORDER.map((agent, index) => {
+                    const complete =
+                      (agent === "main" && analysis?.status === "completed") ||
+                      events.some(
+                        (event) =>
+                          event.agent === agent &&
+                          event.event_type === "agent.completed",
+                      );
+                    const live =
+                      analysis?.current_agent === agent &&
+                      analysis.status === "analyzing";
+                    return (
+                      <div
+                        className={`agent-step${complete ? " complete" : ""}${live ? " live" : ""}`}
+                        key={agent}
+                      >
+                        <span>{String(index).padStart(2, "0")}</span>
+                        <strong>{AGENT_SHORT_LABELS[agent]}</strong>
+                        <i />
+                      </div>
+                    );
+                  })}
                 </section>
-              )}
-            </>
-          ) : (
-            <div className="landing">
-              <span className="landing-number">01—06</span>
-              <h1>Read the repository.<br />Find what matters.</h1>
-              <p>
-                输入一个公开 Git 仓库地址。六个 Agent 将通过 MCP 只读工具从结构、架构、测试、安全和质量方向依次形成证据，并由主 Agent 汇总为可下载审查报告。
-              </p>
-            </div>
-          )}
-        </section>
-      </div>
+
+                <section className="assessment-overview">
+                  {/* 两类图表都直接由当前 findings 计算，刷新后保持同步。 */}
+                  <article className="assessment-card severity-card">
+                    <div className="assessment-heading">
+                      <div>
+                        <span>RISK DISTRIBUTION</span>
+                        <h2>严重级别分布</h2>
+                      </div>
+                      <b>{findings.length.toString().padStart(2, "0")}</b>
+                    </div>
+                    <div className="severity-visual">
+                      <div
+                        aria-label={`共 ${findings.length} 个问题`}
+                        className="severity-donut"
+                        style={{ background: severityGradient }}
+                      >
+                        <div>
+                          <strong>{findings.length}</strong>
+                          <span>问题</span>
+                        </div>
+                      </div>
+                      <div className="severity-legend">
+                        {SEVERITIES.map((severity) => (
+                          <div key={severity}>
+                            <i
+                              style={{ background: SEVERITY_COLORS[severity] }}
+                            />
+                            <span>{SEVERITY_LABELS[severity]}</span>
+                            <b>{severityCounts[severity]}</b>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="assessment-card category-card">
+                    <div className="assessment-heading">
+                      <div>
+                        <span>ISSUE CATEGORIES</span>
+                        <h2>分类评估</h2>
+                      </div>
+                      <b>{CATEGORIES.length.toString().padStart(2, "0")}</b>
+                    </div>
+                    <div className="category-bars">
+                      {CATEGORIES.map(({ key, label, note }) => {
+                        const count = categoryCounts[key];
+                        const percentage =
+                          findings.length > 0
+                            ? (count / findings.length) * 100
+                            : 0;
+                        return (
+                          <button
+                            className={categoryFilter === key ? "active" : ""}
+                            key={key}
+                            onClick={() =>
+                              setCategoryFilter((current) =>
+                                current === key ? "all" : key,
+                              )
+                            }
+                            type="button"
+                          >
+                            <span>
+                              <strong>{label}</strong>
+                              <small>{note}</small>
+                            </span>
+                            <span className="category-track">
+                              <i style={{ width: `${percentage}%` }} />
+                            </span>
+                            <b>{count}</b>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </article>
+                </section>
+
+                <div className="history-strip">
+                  {analyses.map((item) => (
+                    <button
+                      className={item.id === selectedAnalysisId ? "active" : ""}
+                      key={item.id}
+                      onClick={() => void selectAnalysis(item.id)}
+                      type="button"
+                    >
+                      <span className={statusClass(item.status)}>
+                        {item.status}
+                      </span>
+                      <code>{item.id.slice(0, 8)}</code>
+                      <small>{formatDate(item.created_at)}</small>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="tabs">
+                  <button
+                    className={activeTab === "findings" ? "active" : ""}
+                    onClick={() => setActiveTab("findings")}
+                  >
+                    Findings <b>{findings.length}</b>
+                  </button>
+                  <button
+                    className={activeTab === "timeline" ? "active" : ""}
+                    onClick={() => setActiveTab("timeline")}
+                  >
+                    Timeline <b>{events.length}</b>
+                  </button>
+                  <button
+                    className={activeTab === "report" ? "active" : ""}
+                    onClick={() => setActiveTab("report")}
+                  >
+                    Report
+                  </button>
+                </div>
+
+                {activeTab === "findings" && (
+                  <section className="tab-panel">
+                    {/* 分类和严重级别是独立筛选维度。 */}
+                    <div className="filter-row filter-row-labeled">
+                      <span className="filter-label">分类</span>
+                      <button
+                        className={categoryFilter === "all" ? "active" : ""}
+                        onClick={() => setCategoryFilter("all")}
+                        type="button"
+                      >
+                        全部
+                      </button>
+                      {CATEGORIES.map(({ key, label }) => (
+                        <button
+                          className={categoryFilter === key ? "active" : ""}
+                          key={key}
+                          onClick={() => setCategoryFilter(key)}
+                          type="button"
+                        >
+                          {label} {categoryCounts[key]}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="filter-row filter-row-labeled">
+                      <span className="filter-label">级别</span>
+                      <button
+                        className={severityFilter === "all" ? "active" : ""}
+                        onClick={() => setSeverityFilter("all")}
+                        type="button"
+                      >
+                        全部 {findings.length}
+                      </button>
+                      {SEVERITIES.map((severity) => (
+                        <button
+                          className={
+                            severityFilter === severity ? "active" : ""
+                          }
+                          key={severity}
+                          onClick={() => setSeverityFilter(severity)}
+                          type="button"
+                        >
+                          {SEVERITY_LABELS[severity]} {severityCounts[severity]}
+                        </button>
+                      ))}
+                    </div>
+                    {groupedFindings.map((group, groupIndex) => (
+                      <section className="finding-category" key={group.key}>
+                        <header>
+                          <div>
+                            <span>
+                              {String(groupIndex + 1).padStart(2, "0")} /{" "}
+                              {group.note}
+                            </span>
+                            <h3>{group.label}评估</h3>
+                          </div>
+                          <b>{group.items.length}</b>
+                        </header>
+                        <div className="finding-list">
+                          {group.items.map((finding, index) => (
+                            <article
+                              className={`finding ${finding.severity}`}
+                              key={finding.id}
+                            >
+                              <div className="finding-index">
+                                {groupIndex + 1}.
+                                {String(index + 1).padStart(2, "0")}
+                              </div>
+                              <div className="finding-body">
+                                <div className="finding-head">
+                                  <span>
+                                    {SEVERITY_LABELS[finding.severity]}
+                                  </span>
+                                  <span>{group.label}</span>
+                                  <code>
+                                    {finding.file_path ?? "项目级"}
+                                    {finding.line ? `:${finding.line}` : ""}
+                                  </code>
+                                </div>
+                                <h3>{finding.title}</h3>
+                                <p>{finding.evidence}</p>
+                                <div className="finding-note">
+                                  <strong>影响</strong>
+                                  <span>{finding.impact}</span>
+                                </div>
+                                <div className="finding-note">
+                                  <strong>建议</strong>
+                                  <span>{finding.recommendation}</span>
+                                </div>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                    {visibleFindings.length === 0 && (
+                      <div className="empty-state">
+                        {analysis?.status === "completed"
+                          ? "当前筛选条件下没有发现问题。"
+                          : "分析完成后将在这里显示问题。"}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                {activeTab === "timeline" && (
+                  <section className="tab-panel">
+                    <div className="execution-mode">
+                      <div>
+                        <strong>详细执行过程</strong>
+                        <small>
+                          展开查看每个 Agent、路由和 MCP 工具的可观测步骤
+                        </small>
+                      </div>
+                      <label className="switch-control">
+                        <input
+                          checked={showExecutionDetails}
+                          onChange={(event) =>
+                            setShowExecutionDetails(event.target.checked)
+                          }
+                          type="checkbox"
+                        />
+                        <span />
+                        <b>{showExecutionDetails ? "已开启" : "已关闭"}</b>
+                      </label>
+                    </div>
+                    {showExecutionDetails ? (
+                      <ExecutionDetails
+                        analysisStatus={analysis?.status ?? "pending"}
+                        currentAgent={analysis?.current_agent ?? null}
+                        events={events}
+                        startedAt={analysis?.started_at ?? null}
+                      />
+                    ) : (
+                      <div className="timeline">
+                        {/* 简化时间线只保留事件顺序，详细数据由开关控制。 */}
+                        {events.map((event) => (
+                          <article key={event.id}>
+                            <span className="timeline-time">
+                              {analysis?.started_at
+                                ? `+${formatDuration(
+                                    Date.parse(event.created_at) -
+                                      Date.parse(analysis.started_at),
+                                  )}`
+                                : "—"}
+                            </span>
+                            <i />
+                            <div>
+                              <div className="timeline-head">
+                                <strong>
+                                  {AGENT_SHORT_LABELS[event.agent] ??
+                                    event.agent}
+                                </strong>
+                                <code>{event.event_type}</code>
+                              </div>
+                              <p>{event.message}</p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                {activeTab === "report" && (
+                  <section className="tab-panel report-panel">
+                    <div className="report-toolbar">
+                      <span>{artifacts.length} artifacts</span>
+                      {analysis?.status === "completed" && hasHtmlReport && (
+                        <button
+                          className="outline-button"
+                          onClick={downloadHtmlReport}
+                          type="button"
+                        >
+                          下载 HTML 图文报告
+                        </button>
+                      )}
+                      {analysis?.status === "completed" && (
+                        <button
+                          className="download-button"
+                          onClick={downloadMarkdownReport}
+                          type="button"
+                        >
+                          下载 Markdown 报告
+                        </button>
+                      )}
+                    </div>
+                    {analysis?.status === "completed" && hasHtmlReport ? (
+                      /* 独立文档隔离报告样式，避免污染控制台 CSS。 */
+                      <iframe
+                        className="report-frame"
+                        src={api.reportHtmlUrl(analysis.id)}
+                        title="可视化审查报告"
+                      />
+                    ) : (
+                      <pre>{report || "分析完成后生成报告。"}</pre>
+                    )}
+                  </section>
+                )}
+              </>
+            ) : (
+              <div className="landing">
+                <span className="landing-number">01—06</span>
+                <h1>
+                  Read the repository.
+                  <br />
+                  Find what matters.
+                </h1>
+                <p>
+                  输入一个公开 Git 仓库地址。六个 Agent 将通过 MCP
+                  只读工具从结构、架构、测试、安全和质量方向依次形成证据，并由主
+                  Agent 汇总为可下载审查报告。
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </main>
   );
 }

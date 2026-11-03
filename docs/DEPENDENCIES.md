@@ -74,6 +74,8 @@ cd E:\Aipracite\py_workspace\Multiagent
 | npm | 11.13.0 |
 | react | 19.3.1 |
 | react-dom | 19.3.1 |
+| react-markdown | 10.1.0 |
+| remark-gfm | 4.0.1 |
 | typescript | 7.0.2 |
 | vite | 8.3.5 |
 | @vitejs/plugin-react | 6.2.1 |

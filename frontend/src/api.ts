@@ -18,7 +18,8 @@ const runtimeHost =
 
 // 可通过 VITE_API_BASE_URL 覆盖，默认访问同主机的 FastAPI 8000 端口。
 export const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL ?? `${window.location.protocol}//${runtimeHost}:8000`
+  import.meta.env.VITE_API_BASE_URL ??
+  `${window.location.protocol}//${runtimeHost}:8000`
 ).replace(/\/$/, "");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -93,6 +94,10 @@ export const api = {
         title,
       }),
     }),
+  chatSessions: (repositoryId: string) =>
+    request<ChatSession[]>(
+      `/api/v1/chat/sessions?repository_id=${repositoryId}`,
+    ),
   chatMessages: (sessionId: string) =>
     request<ChatMessage[]>(`/api/v1/chat/sessions/${sessionId}/messages`),
   sendChatMessage: (sessionId: string, content: string) =>
