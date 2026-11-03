@@ -7,6 +7,12 @@
   font-synthesis: none;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -15,6 +21,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  overflow: hidden;
   background:
     linear-gradient(rgba(24, 27, 24, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(24, 27, 24, 0.035) 1px, transparent 1px),
@@ -37,8 +44,12 @@ button {
 }
 
 .shell {
+  display: flex;
   width: min(1720px, 100%);
+  height: 100dvh;
   margin: 0 auto;
+  flex-direction: column;
+  overflow: hidden;
   padding: 0 26px 36px;
 }
 
@@ -46,6 +57,7 @@ button {
 .masthead {
   display: flex;
   min-height: 86px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -173,14 +185,21 @@ button {
 /* ---------- 左侧仓库创建与历史栏 ---------- */
 .layout {
   display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
   grid-template-columns: 330px minmax(0, 1fr);
   gap: 0;
+  overflow: hidden;
 }
 
 .rail {
-  min-height: calc(100vh - 86px);
-  padding: 26px 24px 0 0;
+  height: 100%;
+  padding: 26px 24px 28px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-right: 1px solid #c9c7bf;
+  scrollbar-color: #aaa79e transparent;
+  scrollbar-width: thin;
 }
 
 .rail-section + .rail-section {
@@ -349,7 +368,28 @@ button:disabled {
 /* ---------- 主工作区标题与指标 ---------- */
 .workspace {
   min-width: 0;
-  padding: 34px 0 0 34px;
+  height: 100%;
+  padding: 34px 14px 42px 34px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #aaa79e transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.rail::-webkit-scrollbar,
+.workspace::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rail::-webkit-scrollbar-track,
+.workspace::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rail::-webkit-scrollbar-thumb,
+.workspace::-webkit-scrollbar-thumb {
+  background: #b9b6ad;
 }
 
 .repo-heading {
@@ -1398,7 +1438,20 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  #root {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  body {
+    height: auto;
+    overflow-y: auto;
+  }
+
   .shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
     padding: 0 14px 30px;
   }
 
@@ -1417,19 +1470,25 @@ button:disabled {
   }
 
   .layout {
+    overflow: visible;
     grid-template-columns: 1fr;
   }
 
   .rail {
+    height: auto;
     min-height: auto;
     padding: 22px 0;
+    overflow-y: visible;
     border-right: 0;
     border-bottom: 1px solid #c9c7bf;
   }
 
   .workspace {
+    height: auto;
     min-width: 0;
     padding: 28px 0 0;
+    overflow-y: visible;
+    scrollbar-gutter: auto;
   }
 
   .repo-heading > div,
