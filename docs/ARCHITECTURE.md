@@ -169,10 +169,21 @@ stateDiagram-v2
 ## 7. 事件与前端同步
 
 - 所有事件有单调递增的 `sequence`。
+- 事件时间由 Python 应用写入 UTC，避免 PostgreSQL 服务器时钟或时区偏差影响相对耗时。
 - SSE 按 `sequence` 追平数据库中的新事件。
 - 前端去重后按序号排序，避免重连时重复展示。
 - 页面只在运行状态下监听 SSE；历史停止时不再持续请求。
 - MCP 工具调用会生成 `tool.started`、`tool.completed` 或 `tool.failed` 事件。
+
+后端展示分析过程通过三类接口完成：
+
+| 接口 | 用途 |
+| --- | --- |
+| `GET /api/v1/analyses/{id}` | 当前状态、当前 Agent、开始和完成时间 |
+| `GET /api/v1/analyses/{id}/events` | 历史事件回放 |
+| `GET /api/v1/analyses/{id}/events/stream` | SSE 实时事件 |
+
+React 不自行模拟进度，而是根据真实事件渲染 Agent 轨道、工具调用、时间线和失败原因。
 
 ## 8. MCP 工具层
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -41,6 +42,7 @@ async def _create_analysis(
         repository_id=repository.id,
         status=AnalysisStatus.PENDING.value,
         branch=branch or repository.branch,
+        created_at=datetime.now(UTC),
     )
     session.add(analysis)
     await session.flush()
@@ -72,6 +74,8 @@ async def submit_repository(
         name=repository_name(url),
         branch=payload.branch,
         provider=provider,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     session.add(repository)
     await session.flush()

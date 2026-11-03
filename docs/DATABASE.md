@@ -133,6 +133,8 @@ AUTO_CREATE_TABLES=true
 
 旧版 `projects`、`runs`、`agent_events` 和 `artifacts` 已在 2026-11-03 备份到 PostgreSQL schema `repograph_backup_20261103` 后删除。该 schema 仅用于短期回滚，确认现有页面和报告正常后可手工删除。
 
+事件时间修复前还将相关业务表备份到 `repograph_time_fix_20261103`。确认时间线正常后可删除该回滚 schema。
+
 本地 PostgreSQL 可通过 Compose 启动：
 
 ```powershell

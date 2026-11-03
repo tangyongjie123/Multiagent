@@ -320,6 +320,7 @@ async def _run_analysis(analysis_id: UUID) -> None:
                         evidence=finding["evidence"],
                         impact=finding["impact"],
                         recommendation=finding["recommendation"],
+                        created_at=datetime.now(UTC),
                     )
                 )
             for kind, name, path in (
@@ -347,6 +348,7 @@ async def _run_analysis(analysis_id: UUID) -> None:
                         content_type=content_type,
                         storage_path=str(path),
                         sha256=hashlib.sha256(content).hexdigest(),
+                        created_at=datetime.now(UTC),
                     )
                 )
             analysis.status = final_status.value

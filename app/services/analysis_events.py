@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -37,6 +38,8 @@ async def append_analysis_event(
         agent=agent.value,
         message=message,
         data=data or {},
+        # 使用应用时钟，避免 PostgreSQL 服务器时区/时钟偏差破坏 SSE 相对时间。
+        created_at=datetime.now(UTC),
     )
     session.add(event)
     await session.flush()
