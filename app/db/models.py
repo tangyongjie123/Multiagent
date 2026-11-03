@@ -1,20 +1,17 @@
-"""PostgreSQL 持久化模型。"""
+"""Git 仓库分析平台的 PostgreSQL 持久化模型。"""
 
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -26,14 +23,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
-class ProjectRecord(Base):
-    """用户创建的软件开发项目。"""
+class RepositoryRecord(Base):
+    """用户提交分析的 Git 仓库。"""
 
-    __tablename__ = "projects"
+    __tablename__ = "repositories"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    url: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(String(200))
-    requirement: Mapped[str] = mapped_column(Text)
+    branch: Mapped[str | None] = mapped_column(String(200))
+    provider: Mapped[str] = mapped_column(String(40))
+    latest_commit: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -44,26 +44,25 @@ class ProjectRecord(Base):
     )
 
 
-class RunRecord(Base):
-    """一次多 Agent 工作流运行。"""
+class AnalysisRecord(Base):
+    """一次仓库分析运行。"""
 
-    __tablename__ = "runs"
+    __tablename__ = "repository_analyses"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    project_id: Mapped[UUID] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    repository_id: Mapped[UUID] = mapped_column(
+        ForeignKey("repositories.id", ondelete="CASCADE"), index=True
     )
     status: Mapped[str] = mapped_column(String(40), default="pending")
     current_agent: Mapped[str | None] = mapped_column(String(40))
-    is_simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    branch: Mapped[str | None] = mapped_column(String(200))
+    commit_sha: Mapped[str | None] = mapped_column(String(64))
+    summary: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
     worker_id: Mapped[str | None] = mapped_column(String(64))
-    token_budget: Mapped[int] = mapped_column(Integer, default=200_000)
+    finding_count: Mapped[int] = mapped_column(Integer, default=0)
     input_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
     output_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
-    estimated_cost: Mapped[Decimal] = mapped_column(
-        Numeric(18, 6), default=Decimal("0")
-    )
-    error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -72,18 +71,18 @@ class RunRecord(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class AgentEventRecord(Base):
-    """可持久化、可回放的 Agent 事件。"""
+class AnalysisEventRecord(Base):
+    """可持久化、可回放的 Agent 分析事件。"""
 
-    __tablename__ = "agent_events"
+    __tablename__ = "analysis_events"
     __table_args__ = (
-        UniqueConstraint("run_id", "sequence", name="uq_agent_events_run_sequence"),
-        Index("ix_agent_events_run_created", "run_id", "created_at"),
+        UniqueConstraint("analysis_id", "sequence", name="uq_analysis_events_sequence"),
+        Index("ix_analysis_events_created", "analysis_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    run_id: Mapped[UUID] = mapped_column(
-        ForeignKey("runs.id", ondelete="CASCADE"), index=True
+    analysis_id: Mapped[UUID] = mapped_column(
+        ForeignKey("repository_analyses.id", ondelete="CASCADE"), index=True
     )
     sequence: Mapped[int] = mapped_column(Integer)
     event_type: Mapped[str] = mapped_column(String(80))
@@ -95,14 +94,36 @@ class AgentEventRecord(Base):
     )
 
 
-class ArtifactRecord(Base):
-    """运行产生的需求、设计、代码、测试或文档。"""
+class FindingRecord(Base):
+    """结构化代码审查问题。"""
 
-    __tablename__ = "artifacts"
+    __tablename__ = "analysis_findings"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    run_id: Mapped[UUID] = mapped_column(
-        ForeignKey("runs.id", ondelete="CASCADE"), index=True
+    analysis_id: Mapped[UUID] = mapped_column(
+        ForeignKey("repository_analyses.id", ondelete="CASCADE"), index=True
+    )
+    category: Mapped[str] = mapped_column(String(40))
+    severity: Mapped[str] = mapped_column(String(20), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    file_path: Mapped[str | None] = mapped_column(Text)
+    line: Mapped[int | None] = mapped_column(Integer)
+    evidence: Mapped[str] = mapped_column(Text)
+    impact: Mapped[str] = mapped_column(Text)
+    recommendation: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AnalysisArtifactRecord(Base):
+    """分析报告和中间产物。"""
+
+    __tablename__ = "analysis_artifacts"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    analysis_id: Mapped[UUID] = mapped_column(
+        ForeignKey("repository_analyses.id", ondelete="CASCADE"), index=True
     )
     kind: Mapped[str] = mapped_column(String(60))
     name: Mapped[str] = mapped_column(String(255))

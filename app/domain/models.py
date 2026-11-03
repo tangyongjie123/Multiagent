@@ -1,4 +1,4 @@
-"""Agent 工作流使用的领域模型。"""
+"""Git 仓库分析使用的领域模型。"""
 
 from __future__ import annotations
 
@@ -10,28 +10,44 @@ from pydantic import BaseModel, Field
 
 
 class AgentRole(StrEnum):
-    """系统中的 Agent 角色。"""
+    """仓库分析系统中的 Agent 角色。"""
 
     MAIN = "main"
-    PM = "pm"
-    ARCHITECT = "architect"
-    CODER = "coder"
-    TESTER = "tester"
-    REVIEWER = "reviewer"
-    DOC = "doc"
+    REPOSITORY = "repository"
+    ARCHITECTURE = "architecture"
+    TEST = "test"
+    SECURITY = "security"
+    QUALITY = "quality"
+    REPORT = "report"
 
 
-class RunStatus(StrEnum):
-    """工作流运行状态。"""
+class AnalysisStatus(StrEnum):
+    """一次仓库分析的运行状态。"""
 
     PENDING = "pending"
-    RUNNING = "running"
-    WAITING_REQUIREMENT = "waiting_requirement"
-    WAITING_BUDGET = "waiting_budget"
-    WAITING_APPROVAL = "waiting_approval"
+    CLONING = "cloning"
+    ANALYZING = "analyzing"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class FindingSeverity(StrEnum):
+    """问题严重级别。"""
+
+    CRITICAL = "critical"
+    MAJOR = "major"
+    MINOR = "minor"
+    INFO = "info"
+
+
+class FindingCategory(StrEnum):
+    """问题分类。"""
+
+    ARCHITECTURE = "architecture"
+    TEST = "test"
+    SECURITY = "security"
+    QUALITY = "quality"
 
 
 class AgentResult(BaseModel):
@@ -44,8 +60,21 @@ class AgentResult(BaseModel):
     is_simulated: bool = False
 
 
+class Finding(BaseModel):
+    """一条可定位的代码审查问题。"""
+
+    category: FindingCategory
+    severity: FindingSeverity
+    title: str
+    file_path: str | None = None
+    line: int | None = Field(default=None, ge=1)
+    evidence: str
+    impact: str
+    recommendation: str
+
+
 class AgentEvent(BaseModel):
-    """可在前端展示的 Agent 运行事件。"""
+    """可持久化并实时推送的 Agent 事件。"""
 
     sequence: int = Field(ge=1)
     event_type: str
@@ -53,16 +82,3 @@ class AgentEvent(BaseModel):
     message: str
     data: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-class WorkflowResult(BaseModel):
-    """一次完整 Agent 工作流的执行结果。"""
-
-    run_id: str
-    project_name: str
-    requirement: str
-    status: RunStatus
-    completed_agents: list[AgentRole]
-    results: list[AgentResult]
-    events: list[AgentEvent]
-    is_simulated: bool

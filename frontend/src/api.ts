@@ -1,11 +1,11 @@
 import type {
-  AgentEvent,
-  AgentRun,
+  Analysis,
+  AnalysisEvent,
   Artifact,
-  DiffResult,
-  FileList,
+  Finding,
   HealthResult,
-  Project,
+  Repository,
+  RepositorySubmission,
 } from "./types";
 
 const runtimeHost =
@@ -27,51 +27,46 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const detail = await response.text();
     throw new Error(detail || `HTTP ${response.status}`);
   }
-  if (response.status === 204) {
-    return undefined as T;
-  }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
 export const api = {
   health: () => request<HealthResult>("/health"),
-  projects: () => request<Project[]>("/api/v1/projects"),
-  createProject: (name: string, requirement: string) =>
-    request<Project>("/api/v1/projects", {
+  repositories: () => request<Repository[]>("/api/v1/repositories"),
+  createRepository: (url: string, branch: string | null) =>
+    request<RepositorySubmission>("/api/v1/repositories", {
       method: "POST",
-      body: JSON.stringify({ name, requirement }),
+      body: JSON.stringify({ url, branch }),
     }),
-  runs: (projectId: string) =>
-    request<AgentRun[]>(`/api/v1/projects/${projectId}/runs`),
-  startRun: (projectId: string) =>
-    request<AgentRun>(`/api/v1/projects/${projectId}/runs`, {
+  analyses: (repositoryId: string) =>
+    request<Analysis[]>(`/api/v1/repositories/${repositoryId}/analyses`),
+  startAnalysis: (repositoryId: string, branch: string | null) =>
+    request<Analysis>(`/api/v1/repositories/${repositoryId}/analyses`, {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify({ branch }),
     }),
-  cancelRun: (runId: string) =>
-    request<AgentRun>(`/api/v1/runs/${runId}/cancel`, {
+  analysis: (analysisId: string) =>
+    request<Analysis>(`/api/v1/analyses/${analysisId}`),
+  cancelAnalysis: (analysisId: string) =>
+    request<Analysis>(`/api/v1/analyses/${analysisId}/cancel`, {
       method: "POST",
     }),
-  run: (runId: string) => request<AgentRun>(`/api/v1/runs/${runId}`),
-  events: (runId: string) =>
-    request<AgentEvent[]>(`/api/v1/runs/${runId}/events`),
-  artifacts: (runId: string) =>
-    request<Artifact[]>(`/api/v1/runs/${runId}/artifacts`),
-  files: (runId: string) =>
-    request<FileList>(`/api/v1/runs/${runId}/files`),
-  fileContent: async (runId: string, path: string) => {
+  events: (analysisId: string) =>
+    request<AnalysisEvent[]>(`/api/v1/analyses/${analysisId}/events`),
+  findings: (analysisId: string) =>
+    request<Finding[]>(`/api/v1/analyses/${analysisId}/findings`),
+  artifacts: (analysisId: string) =>
+    request<Artifact[]>(`/api/v1/analyses/${analysisId}/artifacts`),
+  report: async (analysisId: string) => {
     const response = await fetch(
-      `${API_BASE}/api/v1/runs/${runId}/files/content?path=${encodeURIComponent(path)}`,
+      `${API_BASE}/api/v1/analyses/${analysisId}/report`,
     );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
+    if (!response.ok) throw new Error(await response.text());
     return response.text();
   },
-  diff: (runId: string) =>
-    request<DiffResult>(`/api/v1/runs/${runId}/diff`),
-  downloadUrl: (runId: string) =>
-    `${API_BASE}/api/v1/runs/${runId}/download`,
-  eventStreamUrl: (runId: string) =>
-    `${API_BASE}/api/v1/runs/${runId}/events/stream`,
+  eventStreamUrl: (analysisId: string) =>
+    `${API_BASE}/api/v1/analyses/${analysisId}/events/stream`,
+  reportUrl: (analysisId: string) =>
+    `${API_BASE}/api/v1/analyses/${analysisId}/report`,
 };

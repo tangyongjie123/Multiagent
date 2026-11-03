@@ -25,5 +25,5 @@ def create_chat_model() -> ChatOpenAI:
         base_url=settings.effective_chat_base_url,
         temperature=0,
         max_retries=0,
-        timeout=180,
+        timeout=settings.chat_request_timeout_seconds,
     )

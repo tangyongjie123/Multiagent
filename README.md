@@ -1,129 +1,144 @@
-# MultiAgent 软件开发协作平台
+# RepoGraph
 
-一个基于 LangGraph、FastAPI、Milvus 和 Neo4j 的多 Agent 软件开发系统。
+RepoGraph 是一个面向 Git 仓库的多 Agent 静态代码审查平台。用户提交公开仓库地址后，主 Agent 通过 LangGraph 依次调度 Repository、Architecture、Test、Security、Quality 和 Report 六个专业 Agent，输出带文件位置、证据、影响和修复建议的中文审查报告。
 
-## 项目状态
+项目只读取被审查仓库，不执行其中的代码、脚本、测试或构建命令，也不会修改或推送目标仓库。
 
-当前已经完成首个可运行的端到端版本：
+## 核心流程
 
-- 项目范围、功能需求和验收标准。
-- Python 3.11 Conda 虚拟环境与依赖记录。
-- DeepSeek、DashScope、Embedding、PostgreSQL、Milvus 和 Neo4j 的安全配置模板。
-- 开发过程 Token、模型价格和费用统计工具。
-- FastAPI 健康检查、项目接口、运行接口和 SSE 事件流。
-- PostgreSQL 异步数据层及项目、运行、事件、产物模型。
-- LangGraph PostgreSQL checkpoint。
-- PostgreSQL 数据库连接、建表和真实 API 持久化验证。
-- SSE 事件推送验证。
-- 主 Agent 集中调度六个专业 Agent 的 LangGraph 图。
-- DashScope `qwen3.8-flash` 对话接口和 `qwen3.7-text-embedding` 向量接口验证成功。
-- 当前 `/health` 中 PostgreSQL、checkpoint、Milvus、Chat 和 Embedding 均已通过。
-- Neo4j 认证、代码图谱约束和真实关系读写已验证通过。
-- 主 Agent 已真实调度 PM、Architect、Coder、Tester、Reviewer 和 Doc。
-- 生成工程已通过 Maven 测试和真实 CRUD 接口验收。
-- 已生成 README、中文使用手册、OpenAPI 和完整 Spring Boot 后端代码。
-- 提供生成工程文件树、内容查看、Diff 和 ZIP 下载接口。
-- React + TypeScript 可视化控制台已可运行。
+```text
+Git URL
+  -> 主 Agent
+  -> Repository Agent
+  -> Architecture Agent
+  -> Test Agent
+  -> Security Agent
+  -> Quality Agent
+  -> Report Agent
+  -> PostgreSQL 问题记录 + Markdown 报告
+```
 
-Docker 沙箱、人工审批交互和 Milvus/Neo4j 可视化将在后续阶段实现。
+每次 Agent 路由、失败、完成和取消状态都会写入事件表，并通过 SSE 实时推送到前端。
 
-## 目标能力
+## 已实现能力
 
-- 主 Agent 统一规划和调度 PM、Architect、Coder、Tester、Reviewer、Doc 六个子 Agent。
-- 通过 LangGraph 保存状态、控制重试并执行质量门禁。
-- 在隔离工作区生成可编译、可测试的 Spring Boot 后端工程。
-- 使用 PostgreSQL 保存运行状态和 checkpoint。
-- 使用 Milvus 检索代码、文档和历史修复案例。
-- 使用 Neo4j 分析代码依赖和修改影响。
-- 使用 FastAPI + SSE 和 React 展示实时执行过程与交付物。
+- 支持 GitHub、GitLab 和 Gitee 的公开 HTTP/HTTPS 仓库地址。
+- 使用 `git clone --depth 1 --single-branch` 浅克隆指定分支。
+- 扫描文件数量、体积、语言、构建文件、测试文件、入口类与 Spring Boot 标识。
+- 使用确定性规则检查疑似凭证、私钥、系统命令执行、空异常块、标准输出日志和 TODO/FIXME。
+- 使用 LangGraph 实现主 Agent 到六个专业 Agent 的显式状态流转。
+- 使用结构化输出约束 Architecture 和 Quality Agent 的问题格式。
+- 将仓库、分析状态、事件、问题和产物元数据持久化到 PostgreSQL。
+- 使用 PostgreSQL 保存 LangGraph checkpoint。
+- 通过 SSE 展示实时进度，并支持取消正在运行的分析。
+- 在 React + TypeScript 控制台中查看问题、时间线、Markdown 报告和历史运行。
+- 提供 FastAPI OpenAPI 文档和基础健康检查。
 
 ## 技术栈
 
-- Python 3.11
-- FastAPI、Pydantic v2、LangGraph、LangChain
-- PostgreSQL、Milvus、Neo4j
-- React、TypeScript、Vite
-- Java 21、Spring Boot 3.x、Maven
+| 层 | 技术 |
+| --- | --- |
+| API | FastAPI、Pydantic v2、Uvicorn |
+| Agent 编排 | LangGraph、LangChain、OpenAI 兼容模型接口 |
+| 数据 | PostgreSQL、SQLAlchemy、asyncpg、psycopg |
+| 前端 | React 19、TypeScript、Vite |
+| 外部服务 | Milvus、Neo4j、DashScope/DeepSeek |
 
-## 目录结构
+## 快速启动
+
+项目绑定以下 Conda 环境：
 
 ```text
-.
-├── AGENTS.md                 项目开发约束
-├── configs/                  模型价格等配置
-├── docs/                     需求、依赖、环境和费用文档
-├── scripts/                  工程辅助脚本
-├── .env.example              环境变量模板
-├── requirements.txt          生产依赖
-├── requirements-dev.txt      开发依赖
-└── requirements-lock.txt     当前环境完整冻结版本
+D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe
+Python 3.11.18
 ```
 
-## 环境配置
-
-使用项目绑定的 Conda 环境：
+首次运行：
 
 ```powershell
-& 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m pip install -r requirements-dev.txt
-```
-
-创建本地配置：
-
-```powershell
+cd E:\Aipracite\py_workspace\Multiagent
 Copy-Item .env.example .env
-```
-
-然后在 `.env` 中填写自己的密钥和数据库连接信息。`.env` 已被 `.gitignore` 排除，禁止提交。
-
-## 启动后端
-
-激活 Conda 环境后，可以直接运行：
-
-```powershell
-python main.py
-```
-
-同时启动后端和前端：
-
-```powershell
+& 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m pip install -r requirements-dev.txt
 cd frontend
 npm install
 cd ..
 python dev.py
 ```
 
-访问 `http://127.0.0.1:5173`，停止时按 `Ctrl+C`。
+打开 `http://127.0.0.1:5173`。`dev.py` 会同时启动 FastAPI 和 Vite，按 `Ctrl+C` 停止。
 
-完整启动命令：
+也可以分别启动：
 
 ```powershell
 & 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m scripts.run_api
 ```
 
-- 存活检查：`GET http://127.0.0.1:8000/health/live`
-- 依赖检查：`GET http://127.0.0.1:8000/health`
-- OpenAPI：`GET http://127.0.0.1:8000/docs`
+```powershell
+cd frontend
+npm run dev
+```
 
-Windows 必须使用 `scripts.run_api` 启动，以确保 psycopg 的异步 checkpoint 运行在 Selector 事件循环中。
+健康检查和接口文档：
 
-## 项目文档
+```text
+GET http://127.0.0.1:8000/health/live
+GET http://127.0.0.1:8000/health
+GET http://127.0.0.1:8000/docs
+```
+
+## 质量检查
+
+```powershell
+& 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m ruff check main.py dev.py app tests scripts
+& 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m mypy app tests
+& 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m pytest
+cd frontend
+npm run build
+```
+
+## 目录结构
+
+```text
+app/
+  agents/         主 Agent、专业 Agent、结构化输出和模型连接
+  api/            FastAPI 路由与请求响应模型
+  core/           配置和日志
+  db/             PostgreSQL ORM 与会话
+  domain/         领域枚举和实体
+  graph/          Neo4j 连接与约束
+  services/       仓库克隆、静态规则、分析执行和事件
+docs/
+  ARCHITECTURE.md            系统架构与执行流程
+  ANALYSIS_MODEL.md          Agent 职责、状态机和问题模型
+  DATABASE.md                PostgreSQL 数据模型
+  DEPENDENCIES.md            Python 与前端依赖
+  ENVIRONMENT_VARIABLES.md   环境变量和外部服务
+  FRONTEND.md                前端设计与运行说明
+  GRAPH_DATABASE.md          Neo4j 图谱设计
+  IMPLEMENTATION_STATUS.md   当前完成度与限制
+  PROJECT_REQUIREMENTS.md    产品范围和验收标准
+frontend/       React 可视化控制台
+scripts/        启动和 Neo4j 验证脚本
+tests/          Python 自动化测试
+```
+
+## 文档
 
 - [项目需求](docs/PROJECT_REQUIREMENTS.md)
-- [依赖与 Python 环境](docs/DEPENDENCIES.md)
-- [环境变量与外部服务](docs/ENVIRONMENT_VARIABLES.md)
-- [模型价格](docs/MODEL_PRICING.md)
-- [开发 Token 与费用记录](docs/DEVELOPMENT_TOKEN_USAGE.md)
-- [数据库设计](docs/DATABASE.md)
-- [Neo4j 代码依赖图](docs/GRAPH_DATABASE.md)
-- [当前实现进度](docs/IMPLEMENTATION_STATUS.md)
-- [首次端到端运行报告](docs/RUN_REPORT_2026-11-02.md)
-- [前端运行说明](docs/FRONTEND.md)
-- [故障排查与修复记录](docs/TROUBLESHOOTING.md)
-- [项目文件与代码说明](docs/PROJECT_FILE_GUIDE.md)
+- [系统架构](docs/ARCHITECTURE.md)
+- [分析模型](docs/ANALYSIS_MODEL.md)
+- [依赖与运行环境](docs/DEPENDENCIES.md)
+- [环境变量](docs/ENVIRONMENT_VARIABLES.md)
+- [PostgreSQL 设计](docs/DATABASE.md)
+- [Neo4j 图谱设计](docs/GRAPH_DATABASE.md)
+- [前端说明](docs/FRONTEND.md)
+- [实现状态](docs/IMPLEMENTATION_STATUS.md)
 
-## 安全说明
+## 安全边界
 
-- 不在代码、文档或日志中保存真实 API Key。
-- 聊天中已暴露的密钥应立即撤销并重新生成。
-- Milvus 使用前先启动虚拟机中的 Docker 服务并完成健康检查。
-- Agent 生成的代码只能在受控沙箱或隔离工作区中执行。
+- 真实密钥只能保存在未纳入版本控制的 `.env`。
+- Git URL 禁止携带用户名或密码，并通过 `GIT_ALLOWED_HOSTS` 限制允许的站点。
+- 限制仓库大小、文件数量和克隆超时。
+- 不运行被审查仓库中的任何代码或命令。
+- 分析产物只写入 `workspaces/repositories/{analysis_id}`。
+- 使用手册中曾公开出现过的密钥应立即撤销并轮换。

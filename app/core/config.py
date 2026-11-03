@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     """从环境变量和本地 `.env` 读取的配置。"""
 
-    app_name: str = "MultiAgent Software Studio"
+    app_name: str = "RepoGraph AI Code Review"
     app_version: str = "0.1.0"
     app_env: Literal["development", "test", "production"] = "development"
     app_host: str = "0.0.0.0"
@@ -24,14 +24,21 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     uvicorn_access_log: bool = True
     frontend_origin: str = "http://localhost:5173"
-    agent_execution_mode: Literal["simulation", "live"] = "simulation"
     chat_provider: Literal["deepseek", "dashscope"] = "deepseek"
     auto_create_tables: bool = True
+
+    git_allowed_hosts: str = "github.com,gitee.com,gitlab.com"
+    git_clone_timeout_seconds: int = Field(default=180, ge=10, le=600)
+    git_max_repository_mb: int = Field(default=200, ge=1, le=2_000)
+    git_max_files: int = Field(default=10_000, ge=100, le=100_000)
+    git_analysis_max_files: int = Field(default=80, ge=10, le=500)
+    git_analysis_max_file_chars: int = Field(default=20_000, ge=1_000)
 
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"
     deepseek_pro_model: str = "deepseek-v4-pro"
+    chat_request_timeout_seconds: int = Field(default=120, ge=10, le=600)
 
     embedding_provider: str = "openai-compatible"
     embedding_api_key: SecretStr | None = None
@@ -65,8 +72,7 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: SecretStr | None = None
 
-    run_token_budget: int = Field(default=200_000, gt=0)
-    max_repair_attempts: int = Field(default=3, ge=0, le=10)
+    analysis_token_budget: int = Field(default=120_000, gt=0)
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
@@ -78,6 +84,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
+
+    @property
+    def allowed_git_hosts(self) -> set[str]:
+        return {
+            host.strip().lower()
+            for host in self.git_allowed_hosts.split(",")
+            if host.strip()
+        }
 
     @property
     def deepseek_configured(self) -> bool:

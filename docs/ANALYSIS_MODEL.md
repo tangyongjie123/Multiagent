@@ -1,0 +1,157 @@
+# Agent 与静态分析模型
+
+更新时间：2026-11-03
+
+## 1. 设计原则
+
+- 所有请求先进入主 Agent。
+- 主 Agent 负责选择、汇总、失败判断和终止。
+- 每个专业 Agent 只处理一项明确职责。
+- 确定性规则优先，模型推理补充需要语义判断的部分。
+- 每条问题必须包含可检查的证据。
+- 分析过程不执行目标仓库代码。
+- 模型、Token、事件和问题都保留结构化记录。
+
+## 2. Agent 输入与输出
+
+### Main Agent
+
+输入：分析 ID、仓库 URL、分支、已完成的 Agent 列表。
+
+输出：下一动作、路由理由和持久化决策。合法动作包括：
+
+```text
+repository
+architecture
+test
+security
+quality
+report
+finish
+fail
+```
+
+### Repository Agent
+
+输入：文件树、扩展名、构建文件、测试文件和 Spring 入口摘要。
+
+输出：文件数量、总字节数、语言统计、构建文件、测试文件、入口类、Spring 标识和有限源码摘要。
+
+该 Agent 不调用大模型。
+
+### Architecture Agent
+
+输入：仓库扫描摘要与最多 12 个源码摘要。
+
+输出 Schema：`ArchitectureInsight`
+
+```json
+{
+  "summary": "架构摘要",
+  "tech_stack": ["Spring Boot"],
+  "modules": ["controller", "service"],
+  "findings": [
+    {
+      "category": "architecture",
+      "severity": "major",
+      "title": "问题标题",
+      "file_path": "src/main/java/...",
+      "line": 10,
+      "evidence": "可验证证据",
+      "impact": "影响",
+      "recommendation": "建议"
+    }
+  ],
+  "recommendations": ["改进建议"]
+}
+```
+
+### Test Agent
+
+输入：构建文件和测试文件路径。
+
+输出：测试文件列表、框架线索、是否执行测试、测试缺口问题。
+
+该 MVP 不运行测试，因此不得宣称测试通过。
+
+### Security Agent
+
+输入：有限源码内容。
+
+输出：确定性安全规则问题。当前规则包括：
+
+- 疑似 API Key、Token、密码和私钥。
+- `Runtime.getRuntime().exec` 与 `new ProcessBuilder(`。
+
+### Quality Agent
+
+输入：确定性质量问题和最多 20 个源码摘要。
+
+输出 Schema：`QualityReview`。模型结果与确定性结果合并，并由主 Agent 最终去重。
+
+当前确定性规则包括：
+
+- 空 `catch` 块。
+- `System.out.print` 代替日志框架。
+- TODO/FIXME 数量。
+
+### Report Agent
+
+输入：前序所有结构化结果。
+
+输出：中文 Markdown。报告按严重级别排序，包含仓库、分支、Commit、问题位置、证据、影响和建议。
+
+## 3. 问题模型
+
+```text
+Finding
+├── category: architecture | test | security | quality
+├── severity: critical | major | minor | info
+├── title
+├── file_path?
+├── line?
+├── evidence
+├── impact
+└── recommendation
+```
+
+严重级别定义：
+
+| 级别 | 含义 |
+| --- | --- |
+| `critical` | 可能导致凭证泄露、远程控制或严重数据风险 |
+| `major` | 明显影响安全、正确性、可维护性或测试保障 |
+| `minor` | 局部代码质量问题或工程规范问题 |
+| `info` | 提示信息或待跟踪事项 |
+
+去重键由分类、严重级别、标题、文件、行号和证据组成。相同问题不会重复写入报告。
+
+## 4. 上下文与 Token 控制
+
+- Repository 扫描最多读取 `GIT_ANALYSIS_MAX_FILES` 个源码文件。
+- 单文件最多读取 `GIT_ANALYSIS_MAX_FILE_CHARS` 个字符。
+- Architecture 只发送 10 个摘要，每个最多 4,000 字符。
+- Quality 只发送 8 个摘要，每个最多 4,000 字符。
+- 默认分析 Token 预算为 120,000。
+- 预算超限后工作流失败并等待用户决定。
+- 不把完整仓库、数据库内容或全部历史对话默认传给模型。
+
+## 5. 模型输出校验
+
+- 提示词要求只返回 JSON。
+- 响应通过 Pydantic Schema 校验。
+- 未知字段被拒绝。
+- 严重级别和问题分类必须来自枚举。
+- JSON 解析失败、超时或鉴权失败都会使当前 Agent 失败。
+
+## 6. 可复现性与限制
+
+确定性规则结果在相同源码输入下可复现。LLM 结果受模型版本、采样和供应商实现影响，因此报告不能等同于正式安全审计。
+
+当前限制：
+
+- 不进行编译、类型分析或运行期测试。
+- 不解析完整 Java AST 或 Maven 依赖闭包。
+- 不读取 Git 历史、Issue 和 Pull Request。
+- Milvus 检索和 Neo4j 自动建图尚未接入主链路。
+- 大型仓库只分析有限源码摘要，可能遗漏跨文件问题。

@@ -1,95 +1,134 @@
-# React 可视化控制台
+# 前端控制台
 
-更新时间：2026-11-02
+更新时间：2026-11-03
 
-## 环境
+## 1. 设计方向
 
-- Node.js 24.16.0
-- npm 11.13.0
-- React 19.3.1
-- React DOM 19.3.1
-- TypeScript 7.0.2
-- Vite 8.3.5
-- `@vitejs/plugin-react` 6.2.1
+前端采用偏编辑设计和技术工作台的视觉语言：
 
-前端代码位于 `frontend/`，依赖版本锁定在 `frontend/package-lock.json`。
+- 浅灰网格背景与高对比黑色排版。
+- 荧光绿作为运行中和关键数字的强调色。
+- 等宽字体显示 URL、Commit、事件类型和文件位置。
+- 左右分栏：左侧创建与仓库历史，右侧展示当前分析。
+- 问题卡片按严重级别使用颜色边界，强调证据和修复建议。
+- 无大型 UI 框架，减少体积并保持视觉一致。
 
-## 启动
+界面默认中文，代码字段、事件类型和环境变量保留英文。
 
-首次安装依赖后，可以在项目根目录同时启动前后端：
+## 2. 技术栈
+
+| 项目 | 版本 |
+| --- | --- |
+| Node.js | 24.16.0 |
+| npm | 11.13.0 |
+| React | 19.3.1 |
+| React DOM | 19.3.1 |
+| TypeScript | 7.0.2 |
+| Vite | 8.3.5 |
+| `@vitejs/plugin-react` | 6.2.1 |
+
+依赖锁定在 `frontend/package-lock.json`。
+
+## 3. 启动
+
+同时启动前后端：
 
 ```powershell
-cd frontend
-npm install
-cd ..
+cd E:\Aipracite\py_workspace\Multiagent
 python dev.py
 ```
 
-也可以分别启动。
+打开 `http://127.0.0.1:5173`。按 `Ctrl+C` 会同时停止 Vite 和 FastAPI。
 
-先启动后端：
-
-```powershell
-& 'D:\itwork\itwork2026\app\Miniconda3\envs\multiagent\python.exe' -m scripts.run_api
-```
-
-再启动前端：
+单独启动：
 
 ```powershell
 cd frontend
-npm install
 npm run dev
 ```
-
-打开 `http://localhost:5173` 或 `http://127.0.0.1:5173`。前端默认连接当前主机的 `8000` 端口；可以用 `VITE_API_BASE_URL` 覆盖。
 
 生产构建：
 
 ```powershell
+cd frontend
 npm run build
 ```
 
-## 当前页面能力
+构建产物写入 `frontend/dist/`，该目录不提交 Git。
 
-- 查看 PostgreSQL、checkpoint、Milvus、Neo4j、Chat 和 Embedding 健康状态。
-- 创建项目并输入开发需求。
-- 查看项目运行历史。
-- 启动主 Agent 运行。
-- 在运行过程中点击“停止运行”，取消模型请求和 Maven 子进程。
-- 通过 SSE 实时展示 Agent 事件。
-- 空闲时不轮询运行状态，页面更新完全由 SSE 事件驱动。
-- 显示主 Agent、PM、Architect、Coder、Tester、Reviewer 和 Doc 执行状态。
-- 实时显示运行已耗时，完成后固定为最终耗时。
-- 事件时间线显示相对运行开始的 `+时:分:秒`。
-- 查看运行 Token 和当前 Agent。
-- 浏览生成工程文件树。
-- 查看 Java、Markdown、YAML 等文件内容。
-- 查看生成工程初始 Diff。
-- 下载完整工程 ZIP。
+## 4. 页面能力
 
-## CORS
+### 新建分析
 
-开发环境允许：
+- 输入公开 Git URL。
+- 可选指定分支。
+- 校验失败时展示后端返回的中文错误。
+- 创建成功后立即开始分析并进入实时视图。
 
-```text
-http://localhost:5173
-http://127.0.0.1:5173
+### 仓库与历史
+
+- 左侧显示提交过的仓库。
+- 选择仓库后加载分析历史。
+- 点击历史运行恢复状态、事件、问题和报告。
+- 支持对同一仓库重新分析。
+
+### 状态概览
+
+- 分析状态。
+- 当前 Agent。
+- 实时运行耗时。
+- 问题数量。
+- Commit 和分支。
+- PostgreSQL、checkpoint、Milvus、Neo4j、LLM 和 Embedding 状态。
+
+### Agent 进度
+
+展示主 Agent、Repository、Architecture、Test、Security、Quality 和 Report。事件完成后更新节点状态。
+
+### 问题列表
+
+- 按 critical、major、minor、info 统计和筛选。
+- 展示分类、文件与行号、标题、证据、影响和建议。
+
+### 时间线
+
+- 按事件序号展示真实运行事件。
+- 显示相对开始时间、Agent、事件类型和中文消息。
+- 使用 SSE 增量更新，不进行高频状态轮询。
+
+### 报告
+
+- 在线查看 Markdown 原文。
+- 完成后下载 `.md` 文件。
+- 分析失败或取消时不提供成功报告。
+
+## 5. API 连接
+
+开发模式默认请求当前主机的 `8000` 端口。可以通过 Vite 环境变量覆盖：
+
+```dotenv
+VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-部署到其他域名时，需要同步修改 `.env` 中的 `FRONTEND_ORIGIN`。
+后端允许的来源由 `FRONTEND_ORIGIN` 控制：
 
-## 日志
+```dotenv
+FRONTEND_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
+```
 
-`.env` 默认设置：
+## 6. 日志与停止
+
+`.env` 默认关闭逐请求访问日志：
 
 ```dotenv
 UVICORN_ACCESS_LOG=false
 ```
 
-这会关闭逐请求访问日志，保留应用启动、异常和 Agent 运行日志。如需调试 HTTP 请求，可改为 `true`。
+应用启动、异常和关键服务状态仍会输出；`httpx` 和 `httpcore` 的逐请求信息被降到警告级别。页面上的“停止”按钮只取消当前分析，不会退出服务。
 
-## 当前限制
+## 7. 当前限制
 
-- 尚未实现代码编辑器和带行号的语法高亮。
-- 尚未实现预算确认和人工审批按钮。
-- 尚未实现 Milvus 检索结果和 Neo4j 依赖图可视化。
+- Markdown 报告以 `<pre>` 展示，尚未接入 Markdown 渲染和代码高亮。
+- 尚未实现 Neo4j 依赖图可视化和 Milvus 相似片段面板。
+- 尚未实现登录、多用户和仓库权限隔离。
+- 当前轮询间隔由后端 SSE 实现控制，前端不使用 WebSocket。

@@ -1,4 +1,4 @@
-"""运行事件持久化。"""
+"""仓库分析事件持久化。"""
 
 from __future__ import annotations
 
@@ -8,27 +8,27 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AgentEventRecord
+from app.db.models import AnalysisEventRecord
 from app.domain.models import AgentRole
 
 
-async def append_event(
+async def append_analysis_event(
     session: AsyncSession,
-    run_id: UUID,
+    analysis_id: UUID,
     event_type: str,
     agent: AgentRole,
     message: str,
     data: dict[str, Any] | None = None,
-) -> AgentEventRecord:
-    """按运行内顺序追加事件。"""
+) -> AnalysisEventRecord:
+    """按分析内顺序追加事件。"""
 
     current_sequence = await session.scalar(
-        select(func.coalesce(func.max(AgentEventRecord.sequence), 0)).where(
-            AgentEventRecord.run_id == run_id
+        select(func.coalesce(func.max(AnalysisEventRecord.sequence), 0)).where(
+            AnalysisEventRecord.analysis_id == analysis_id
         )
     )
-    event = AgentEventRecord(
-        run_id=run_id,
+    event = AnalysisEventRecord(
+        analysis_id=analysis_id,
         sequence=int(current_sequence or 0) + 1,
         event_type=event_type,
         agent=agent.value,

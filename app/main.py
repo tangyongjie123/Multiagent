@@ -19,7 +19,7 @@ from app.db.session import (
     initialize_database,
 )
 from app.graph.neo4j import close_neo4j, initialize_neo4j
-from app.services.run_executor import recover_interrupted_runs
+from app.services.analysis_runner import recover_interrupted_analyses
 
 
 @asynccontextmanager
@@ -30,7 +30,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level)
     await initialize_database()
     with suppress(Exception):
-        await recover_interrupted_runs()
+        await recover_interrupted_analyses()
     with suppress(Exception):
         await initialize_checkpointer()
     with suppress(Exception):

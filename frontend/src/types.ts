@@ -1,40 +1,50 @@
-export type RunStatus =
+export type AnalysisStatus =
   | "pending"
-  | "running"
-  | "waiting_requirement"
-  | "waiting_budget"
-  | "waiting_approval"
+  | "cloning"
+  | "analyzing"
   | "completed"
   | "failed"
   | "cancelled";
 
-export interface Project {
+export type Severity = "critical" | "major" | "minor" | "info";
+export type FindingCategory = "architecture" | "test" | "security" | "quality";
+
+export interface Repository {
   id: string;
+  url: string;
   name: string;
-  requirement: string;
+  branch: string | null;
+  provider: string;
+  latest_commit: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface AgentRun {
+export interface Analysis {
   id: string;
-  project_id: string;
-  status: RunStatus;
+  repository_id: string;
+  status: AnalysisStatus;
   current_agent: string | null;
-  is_simulated: boolean;
-  token_budget: number;
+  branch: string | null;
+  commit_sha: string | null;
+  summary: string | null;
+  error_message: string | null;
+  finding_count: number;
   input_tokens: number;
   output_tokens: number;
-  estimated_cost: number;
-  error_message: string | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
 }
 
-export interface AgentEvent {
+export interface RepositorySubmission {
+  repository: Repository;
+  analysis: Analysis;
+}
+
+export interface AnalysisEvent {
   id: number;
-  run_id: string;
+  analysis_id: string;
   sequence: number;
   event_type: string;
   agent: string;
@@ -43,33 +53,28 @@ export interface AgentEvent {
   created_at: string;
 }
 
+export interface Finding {
+  id: string;
+  analysis_id: string;
+  category: FindingCategory;
+  severity: Severity;
+  title: string;
+  file_path: string | null;
+  line: number | null;
+  evidence: string;
+  impact: string;
+  recommendation: string;
+  created_at: string;
+}
+
 export interface Artifact {
   id: string;
-  run_id: string;
+  analysis_id: string;
   kind: string;
   name: string;
   content_type: string;
   sha256: string;
   created_at: string;
-}
-
-export interface FileEntry {
-  path: string;
-  size: number;
-}
-
-export interface FileList {
-  run_id: string;
-  files: FileEntry[];
-  file_count: number;
-  total_size: number;
-}
-
-export interface DiffResult {
-  run_id: string;
-  additions: number;
-  deletions: number;
-  patch: string;
 }
 
 export interface HealthComponent {

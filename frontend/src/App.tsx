@@ -2,201 +2,202 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "./api";
 import type {
-  AgentEvent,
-  AgentRun,
+  Analysis,
+  AnalysisEvent,
   Artifact,
-  DiffResult,
-  FileEntry,
+  Finding,
   HealthResult,
-  Project,
+  Repository,
+  Severity,
 } from "./types";
 
-const ROLE_ORDER = ["main", "pm", "architect", "coder", "tester", "reviewer", "doc"];
-const ROLE_LABELS: Record<string, string> = {
-  main: "主 Agent",
-  pm: "PM",
-  architect: "Architect",
-  coder: "Coder",
-  tester: "Tester",
-  reviewer: "Reviewer",
-  doc: "Doc",
+const AGENT_ORDER = [
+  "main",
+  "repository",
+  "architecture",
+  "test",
+  "security",
+  "quality",
+  "report",
+];
+const AGENT_LABELS: Record<string, string> = {
+  main: "Main",
+  repository: "Repository",
+  architecture: "Architecture",
+  test: "Test",
+  security: "Security",
+  quality: "Quality",
+  report: "Report",
 };
+const TERMINAL = ["completed", "failed", "cancelled"];
 const STREAM_EVENTS = [
-  "run.created",
-  "run.started",
+  "analysis.created",
+  "analysis.started",
+  "repository.scanned",
   "agent.started",
   "agent.completed",
   "agent.failed",
-  "run.completed",
-  "run.failed",
-  "run.interrupted",
+  "analysis.completed",
+  "analysis.failed",
+  "analysis.cancelled",
+  "analysis.interrupted",
 ];
-const TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
+const SEVERITIES: Severity[] = ["critical", "major", "minor", "info"];
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "short",
-    timeStyle: "medium",
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(new Date(value));
 }
 
-function formatBytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / 1024 / 1024).toFixed(1)} MB`;
-}
-
 function formatDuration(milliseconds: number): string {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = seconds % 60;
+  return hours
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
 function statusClass(status: string): string {
-  if (["completed", "ok"].includes(status)) return "status status-ok";
-  if (["failed", "error", "cancelled"].includes(status)) return "status status-error";
-  if (["running", "pending"].includes(status)) return "status status-running";
-  return "status status-neutral";
+  if (["completed", "ok"].includes(status)) return "state state-good";
+  if (["failed", "error", "cancelled"].includes(status)) return "state state-bad";
+  if (["analyzing", "cloning", "pending"].includes(status)) return "state state-live";
+  return "state";
+}
+
+function repoShortName(repository: Repository): string {
+  return repository.url.replace(/\.git$/, "").split("/").slice(-2).join("/");
 }
 
 export default function App() {
   const [health, setHealth] = useState<HealthResult | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-  const [runs, setRuns] = useState<AgentRun[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<string>("");
-  const [run, setRun] = useState<AgentRun | null>(null);
-  const [events, setEvents] = useState<AgentEvent[]>([]);
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState("");
+  const [analyses, setAnalyses] = useState<Analysis[]>([]);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState("");
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [events, setEvents] = useState<AnalysisEvent[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [activePath, setActivePath] = useState<string>("");
-  const [activeContent, setActiveContent] = useState<string>("");
-  const [diff, setDiff] = useState<DiffResult | null>(null);
-  const [viewMode, setViewMode] = useState<"content" | "diff">("content");
-  const [name, setName] = useState("任务管理 API");
-  const [requirement, setRequirement] = useState(
-    "使用 Java 21、Spring Boot 3、Maven 和 H2 生成任务管理 REST API，支持增删改查、参数校验、测试、OpenAPI 和中文使用手册。",
+  const [report, setReport] = useState("");
+  const [activeTab, setActiveTab] = useState<"findings" | "timeline" | "report">(
+    "findings",
   );
+  const [severityFilter, setSeverityFilter] = useState<Severity | "all">("all");
+  const [repoUrl, setRepoUrl] = useState("");
+  const [branch, setBranch] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [clock, setClock] = useState(Date.now());
 
-  const selectedProject = useMemo(
-    () => projects.find((project) => project.id === selectedProjectId) ?? null,
-    [projects, selectedProjectId],
+  const selectedRepository = useMemo(
+    () => repositories.find((item) => item.id === selectedRepositoryId) ?? null,
+    [repositories, selectedRepositoryId],
   );
-  const elapsedText = useMemo(() => {
-    if (!run?.started_at) return "—";
-    const end = run.completed_at ? Date.parse(run.completed_at) : clock;
-    return formatDuration(end - Date.parse(run.started_at));
-  }, [clock, run]);
+  const visibleFindings = useMemo(
+    () =>
+      severityFilter === "all"
+        ? findings
+        : findings.filter((item) => item.severity === severityFilter),
+    [findings, severityFilter],
+  );
+  const severityCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        SEVERITIES.map((severity) => [
+          severity,
+          findings.filter((item) => item.severity === severity).length,
+        ]),
+      ) as Record<Severity, number>,
+    [findings],
+  );
+  const elapsed = analysis?.started_at
+    ? formatDuration(
+        (analysis.completed_at ? Date.parse(analysis.completed_at) : clock) -
+          Date.parse(analysis.started_at),
+      )
+    : "—";
+  const streamEnabled =
+    analysis?.id === selectedAnalysisId &&
+    ["pending", "cloning", "analyzing"].includes(analysis.status);
 
-  async function loadHealth() {
-    try {
-      setHealth(await api.health());
-    } catch (requestError) {
-      setError(String(requestError));
+  async function loadAnalysis(analysisId: string): Promise<Analysis> {
+    const result = await api.analysis(analysisId);
+    setAnalysis(result);
+    if (TERMINAL.includes(result.status)) {
+      const [nextFindings, nextArtifacts] = await Promise.all([
+        api.findings(analysisId),
+        api.artifacts(analysisId),
+      ]);
+      setFindings(nextFindings);
+      setArtifacts(nextArtifacts);
+      if (result.status === "completed") {
+        setReport(await api.report(analysisId));
+      }
     }
+    return result;
   }
 
-  async function loadProjects() {
-    try {
-      const result = await api.projects();
-      setProjects(result);
-      setSelectedProjectId((current) => current || result[0]?.id || "");
-    } catch (requestError) {
-      setError(String(requestError));
-    }
-  }
-
-  async function loadRun(runId: string): Promise<AgentRun> {
-    const nextRun = await api.run(runId);
-    setRun(nextRun);
-    if (TERMINAL_STATUSES.includes(nextRun.status)) {
-      await loadDeliverables(runId);
-    }
-    return nextRun;
-  }
-
-  async function loadDeliverables(runId: string) {
-    const [nextArtifacts, nextFiles, nextDiff] = await Promise.all([
-      api.artifacts(runId),
-      api.files(runId).catch(() => ({ files: [] })),
-      api.diff(runId).catch(() => null),
-    ]);
-    setArtifacts(nextArtifacts);
-    setFiles(nextFiles.files);
-    setDiff(nextDiff);
-    if (!activePath && nextFiles.files.length > 0) {
-      setActivePath(nextFiles.files[0].path);
-    }
-  }
-
-  async function loadEvents(runId: string) {
-    const result = await api.events(runId);
-    setEvents(result);
-  }
-
-  async function selectRun(runId: string) {
-    setSelectedRunId(runId);
-    setEvents([]);
+  async function selectAnalysis(analysisId: string) {
+    setSelectedAnalysisId(analysisId);
+    setFindings([]);
     setArtifacts([]);
-    setFiles([]);
-    setDiff(null);
-    setActivePath("");
-    setActiveContent("");
-    await Promise.all([loadRun(runId), loadEvents(runId)]);
+    setReport("");
+    setEvents(await api.events(analysisId));
+    await loadAnalysis(analysisId);
+  }
+
+  async function selectRepository(repositoryId: string) {
+    setSelectedRepositoryId(repositoryId);
+    setSelectedAnalysisId("");
+    setAnalysis(null);
+    setFindings([]);
+    setArtifacts([]);
+    setReport("");
+    const history = await api.analyses(repositoryId);
+    setAnalyses(history);
+    if (history[0]) {
+      await selectAnalysis(history[0].id);
+    }
   }
 
   useEffect(() => {
-    void loadHealth();
-    void loadProjects();
+    api
+      .health()
+      .then(setHealth)
+      .catch((requestError) => setError(String(requestError)));
+    api
+      .repositories()
+      .then(async (items) => {
+        setRepositories(items);
+        if (items[0]) await selectRepository(items[0].id);
+      })
+      .catch((requestError) => setError(String(requestError)));
   }, []);
 
   useEffect(() => {
-    if (!selectedProjectId) {
-      setRuns([]);
-      return;
-    }
-    api
-      .runs(selectedProjectId)
-      .then((result) => {
-        setRuns(result);
-        if (result[0]) {
-          void selectRun(result[0].id);
-        } else {
-          setSelectedRunId("");
-          setRun(null);
-        }
-      })
-      .catch((requestError) => setError(String(requestError)));
-  }, [selectedProjectId]);
-
-  const streamEnabled =
-    run?.id === selectedRunId &&
-    ["pending", "running"].includes(run.status);
+    setClock(Date.now());
+    if (!analysis || TERMINAL.includes(analysis.status)) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [analysis?.id, analysis?.status]);
 
   useEffect(() => {
-    if (!selectedRunId || !streamEnabled) return;
-
-    const stream = new EventSource(api.eventStreamUrl(selectedRunId));
+    if (!selectedAnalysisId || !streamEnabled) return;
+    const stream = new EventSource(api.eventStreamUrl(selectedAnalysisId));
     const onEvent = (message: MessageEvent<string>) => {
-      const event = JSON.parse(message.data) as AgentEvent;
+      const event = JSON.parse(message.data) as AnalysisEvent;
       setEvents((current) =>
         current.some((item) => item.id === event.id)
           ? current
-          : [...current, event].sort((left, right) => left.sequence - right.sequence),
+          : [...current, event].sort((a, b) => a.sequence - b.sequence),
       );
-      void loadRun(selectedRunId).then((nextRun) => {
-        if (TERMINAL_STATUSES.includes(nextRun.status)) {
-          stream.close();
-        }
+      void loadAnalysis(selectedAnalysisId).then((latest) => {
+        if (TERMINAL.includes(latest.status)) stream.close();
       });
     };
     for (const eventName of STREAM_EVENTS) {
@@ -208,31 +209,24 @@ export default function App() {
       }
       stream.close();
     };
-  }, [selectedRunId, streamEnabled]);
+  }, [selectedAnalysisId, streamEnabled]);
 
-  useEffect(() => {
-    if (!selectedRunId || !activePath) return;
-    api
-      .fileContent(selectedRunId, activePath)
-      .then(setActiveContent)
-      .catch((requestError) => setError(String(requestError)));
-  }, [selectedRunId, activePath]);
-
-  useEffect(() => {
-    setClock(Date.now());
-    if (!run || TERMINAL_STATUSES.includes(run.status)) return;
-    const timer = window.setInterval(() => setClock(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [run?.id, run?.status]);
-
-  async function createProject(event: React.FormEvent) {
+  async function submitRepository(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const project = await api.createProject(name.trim(), requirement.trim());
-      setProjects((current) => [project, ...current]);
-      setSelectedProjectId(project.id);
+      const result = await api.createRepository(repoUrl.trim(), branch.trim() || null);
+      setRepositories((current) => [
+        result.repository,
+        ...current.filter((item) => item.id !== result.repository.id),
+      ]);
+      setSelectedRepositoryId(result.repository.id);
+      setAnalyses([result.analysis]);
+      setEvents(await api.events(result.analysis.id));
+      await loadAnalysis(result.analysis.id);
+      setSelectedAnalysisId(result.analysis.id);
+      setRepoUrl("");
     } catch (requestError) {
       setError(String(requestError));
     } finally {
@@ -240,14 +234,19 @@ export default function App() {
     }
   }
 
-  async function startRun() {
-    if (!selectedProject) return;
+  async function startAnalysis() {
+    if (!selectedRepository) return;
     setBusy(true);
     setError("");
     try {
-      const created = await api.startRun(selectedProject.id);
-      setRuns((current) => [created, ...current]);
-      await selectRun(created.id);
+      const created = await api.startAnalysis(
+        selectedRepository.id,
+        branch.trim() || null,
+      );
+      setAnalyses((current) => [created, ...current]);
+      setEvents(await api.events(created.id));
+      setSelectedAnalysisId(created.id);
+      await loadAnalysis(created.id);
     } catch (requestError) {
       setError(String(requestError));
     } finally {
@@ -255,257 +254,331 @@ export default function App() {
     }
   }
 
-  async function stopRun() {
-    if (!run) return;
+  async function cancelAnalysis() {
+    if (!analysis) return;
     setBusy(true);
-    setError("");
     try {
-      const cancelled = await api.cancelRun(run.id);
-      setRun(cancelled);
-      await loadEvents(run.id);
+      setAnalysis(await api.cancelAnalysis(analysis.id));
+      setEvents(await api.events(analysis.id));
     } catch (requestError) {
       setError(String(requestError));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function downloadReport() {
+    if (!analysis) return;
+    const content = await api.report(analysis.id);
+    const url = URL.createObjectURL(new Blob([content], { type: "text/markdown" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${selectedRepository?.name ?? "repository"}-analysis.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">MULTI-AGENT SOFTWARE STUDIO</p>
-          <h1>开发协作控制台</h1>
-        </div>
-        <div className="health-strip">
+    <main className="shell">
+      <header className="masthead">
+        <a className="brand" href="/">
+          <span className="brand-mark">RG</span>
+          <span>
+            <strong>RepoGraph</strong>
+            <small>AI CODE REVIEW</small>
+          </span>
+        </a>
+        <div className="system-state">
           {health &&
             Object.entries(health.components).map(([name, component]) => (
               <span className={statusClass(component.status)} key={name}>
-                {name}: {component.status}
+                <i />
+                {name}
               </span>
             ))}
         </div>
       </header>
 
       {error && (
-        <div className="error-banner">
-          <strong>请求失败</strong>
+        <div className="notice">
+          <strong>操作失败</strong>
           <span>{error}</span>
-          <button type="button" onClick={() => setError("")}>
-            关闭
+          <button onClick={() => setError("")} type="button">
+            ×
           </button>
         </div>
       )}
 
-      <div className="workspace-grid">
-        <aside className="panel project-panel">
-          <div className="panel-heading">
-            <span>01</span>
-            <h2>项目</h2>
-          </div>
-          <form onSubmit={createProject} className="stack-form">
-            <label>
-              项目名称
-              <input value={name} onChange={(event) => setName(event.target.value)} />
-            </label>
-            <label>
-              开发需求
-              <textarea
-                rows={7}
-                value={requirement}
-                onChange={(event) => setRequirement(event.target.value)}
-              />
-            </label>
-            <button className="primary" disabled={busy} type="submit">
-              创建项目
-            </button>
-          </form>
-
-          <div className="project-list">
-            {projects.map((project) => (
-              <button
-                className={project.id === selectedProjectId ? "project active" : "project"}
-                key={project.id}
-                onClick={() => setSelectedProjectId(project.id)}
-                type="button"
-              >
-                <strong>{project.name}</strong>
-                <span>{formatDate(project.created_at)}</span>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel run-panel">
-          <div className="panel-heading">
-            <span>02</span>
-            <h2>主 Agent 运行</h2>
-          </div>
-          {selectedProject ? (
-            <div className="run-toolbar">
-              <div>
-                <strong>{selectedProject.name}</strong>
-                <p>{selectedProject.requirement}</p>
-              </div>
-              <div className="run-actions">
-                <button className="primary" disabled={busy} onClick={startRun}>
-                  启动新运行
-                </button>
-                {run && ["pending", "running"].includes(run.status) && (
-                  <button className="danger" disabled={busy} onClick={stopRun}>
-                    停止运行
-                  </button>
-                )}
-              </div>
+      <div className="layout">
+        <aside className="rail">
+          <section className="rail-section">
+            <div className="section-kicker">
+              <span>New analysis</span>
+              <b>01</b>
             </div>
-          ) : (
-            <p className="empty">请先创建或选择项目。</p>
-          )}
+            <form className="repo-form" onSubmit={submitRepository}>
+              <label>
+                Git repository
+                <input
+                  onChange={(event) => setRepoUrl(event.target.value)}
+                  placeholder="https://github.com/org/repo.git"
+                  required
+                  value={repoUrl}
+                />
+              </label>
+              <label>
+                Branch
+                <input
+                  onChange={(event) => setBranch(event.target.value)}
+                  placeholder="main（可留空）"
+                  value={branch}
+                />
+              </label>
+              <button className="solid-button" disabled={busy} type="submit">
+                {busy ? "正在提交..." : "开始分析"}
+              </button>
+              <p className="fine-print">
+                MVP 支持 GitHub、GitLab、Gitee 的公开仓库，只做只读静态分析。
+              </p>
+            </form>
+          </section>
 
-          {runs.length > 0 && (
-            <div className="run-history">
-              {runs.map((item) => (
+          <section className="rail-section repositories">
+            <div className="section-kicker">
+              <span>Repositories</span>
+              <b>{repositories.length.toString().padStart(2, "0")}</b>
+            </div>
+            <div className="repo-list">
+              {repositories.map((repository) => (
                 <button
-                  className={item.id === selectedRunId ? "run-row active" : "run-row"}
-                  key={item.id}
-                  onClick={() => void selectRun(item.id)}
+                  className={
+                    repository.id === selectedRepositoryId
+                      ? "repo-card selected"
+                      : "repo-card"
+                  }
+                  key={repository.id}
+                  onClick={() => void selectRepository(repository.id)}
                   type="button"
                 >
-                  <span className={statusClass(item.status)}>{item.status}</span>
-                  <code>{item.id.slice(0, 8)}</code>
-                  <span>{formatDate(item.created_at)}</span>
+                  <span className="repo-provider">{repository.provider}</span>
+                  <strong>{repoShortName(repository)}</strong>
+                  <small>{formatDate(repository.created_at)}</small>
                 </button>
               ))}
             </div>
-          )}
+          </section>
+        </aside>
 
-          {run && (
+        <section className="workspace">
+          {selectedRepository ? (
             <>
-              <div className="agent-map">
-                {ROLE_ORDER.map((role) => {
-                  const completed = events.some(
-                    (event) =>
-                      event.agent === role && event.event_type === "agent.completed",
-                  );
-                  const active = run.current_agent === role && run.status === "running";
+              <div className="repo-heading">
+                <div>
+                  <p className="eyebrow">REPOSITORY REVIEW</p>
+                  <h1>{repoShortName(selectedRepository)}</h1>
+                  <a href={selectedRepository.url} rel="noreferrer" target="_blank">
+                    {selectedRepository.url}
+                  </a>
+                </div>
+                <div className="heading-actions">
+                  <button className="outline-button" disabled={busy} onClick={startAnalysis}>
+                    重新分析
+                  </button>
+                  {analysis && ["pending", "cloning", "analyzing"].includes(analysis.status) && (
+                    <button className="stop-button" disabled={busy} onClick={cancelAnalysis}>
+                      停止
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="status-grid">
+                <article className="metric hero-metric">
+                  <span>Analysis status</span>
+                  <strong className={statusClass(analysis?.status ?? "pending")}>
+                    {analysis?.status ?? "等待分析"}
+                  </strong>
+                  <small>{analysis?.summary ?? "选择历史运行或启动新分析"}</small>
+                </article>
+                <article className="metric">
+                  <span>Elapsed</span>
+                  <strong>{elapsed}</strong>
+                  <small>{analysis?.current_agent ?? "—"}</small>
+                </article>
+                <article className="metric">
+                  <span>Findings</span>
+                  <strong>{analysis?.finding_count ?? findings.length}</strong>
+                  <small>所有严重级别</small>
+                </article>
+                <article className="metric">
+                  <span>Commit</span>
+                  <strong className="mono">{analysis?.commit_sha?.slice(0, 8) ?? "—"}</strong>
+                  <small>{analysis?.branch ?? "默认分支"}</small>
+                </article>
+              </div>
+
+              <section className="agent-track">
+                {AGENT_ORDER.map((agent, index) => {
+                  const complete =
+                    (agent === "main" && analysis?.status === "completed") ||
+                    events.some(
+                      (event) =>
+                        event.agent === agent && event.event_type === "agent.completed",
+                    );
+                  const live = analysis?.current_agent === agent && analysis.status === "analyzing";
                   return (
                     <div
-                      className={`agent-node${completed ? " done" : ""}${active ? " active" : ""}`}
-                      key={role}
+                      className={`agent-step${complete ? " complete" : ""}${live ? " live" : ""}`}
+                      key={agent}
                     >
-                      <span>{ROLE_LABELS[role]}</span>
+                      <span>{String(index).padStart(2, "0")}</span>
+                      <strong>{AGENT_LABELS[agent]}</strong>
+                      <i />
                     </div>
                   );
                 })}
-              </div>
-              <div className="run-metrics">
-                <div>
-                  <span>状态</span>
-                  <strong className={statusClass(run.status)}>{run.status}</strong>
-                </div>
-                <div>
-                  <span>当前 Agent</span>
-                  <strong>{ROLE_LABELS[run.current_agent ?? ""] ?? "—"}</strong>
-                </div>
-                <div>
-                  <span>输入 Token</span>
-                  <strong>{run.input_tokens.toLocaleString()}</strong>
-                </div>
-                <div>
-                  <span>输出 Token</span>
-                  <strong>{run.output_tokens.toLocaleString()}</strong>
-                </div>
-                <div>
-                  <span>开始时间</span>
-                  <strong>{formatDate(run.started_at)}</strong>
-                </div>
-                <div>
-                  <span>已运行时间</span>
-                  <strong className="elapsed-time">{elapsedText}</strong>
-                </div>
-              </div>
-              <div className="event-stream">
-                {events.map((event) => (
-                  <article className="event" key={event.id}>
-                    <div className={`event-dot event-${event.event_type}`} />
-                    <div>
-                      <div className="event-title">
-                        <strong>{ROLE_LABELS[event.agent] ?? event.agent}</strong>
-                        <span>{event.event_type}</span>
-                        <em>
-                          {run.started_at
-                            ? `+${formatDuration(
-                                Date.parse(event.created_at) -
-                                  Date.parse(run.started_at),
-                              )}`
-                            : ""}
-                        </em>
-                        <time>{formatDate(event.created_at)}</time>
-                      </div>
-                      <p>{event.message}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
+              </section>
 
-        <section className="panel output-panel">
-          <div className="panel-heading">
-            <span>03</span>
-            <h2>交付物</h2>
-            {selectedRunId && run?.status === "completed" && (
-              <a className="download" href={api.downloadUrl(selectedRunId)}>
-                下载 ZIP
-              </a>
-            )}
-          </div>
-          <div className="view-tabs">
-            <button
-              className={viewMode === "content" ? "active" : ""}
-              onClick={() => setViewMode("content")}
-            >
-              文件内容
-            </button>
-            <button
-              className={viewMode === "diff" ? "active" : ""}
-              onClick={() => setViewMode("diff")}
-            >
-              Diff {diff ? `+${diff.additions}` : ""}
-            </button>
-          </div>
-          {viewMode === "content" ? (
-            <div className="code-layout">
-              <div className="file-tree">
-                {files.map((file) => (
+              <div className="history-strip">
+                {analyses.map((item) => (
                   <button
-                    className={file.path === activePath ? "active" : ""}
-                    key={file.path}
-                    onClick={() => setActivePath(file.path)}
-                    title={`${file.path} · ${formatBytes(file.size)}`}
+                    className={item.id === selectedAnalysisId ? "active" : ""}
+                    key={item.id}
+                    onClick={() => void selectAnalysis(item.id)}
                     type="button"
                   >
-                    {file.path}
+                    <span className={statusClass(item.status)}>{item.status}</span>
+                    <code>{item.id.slice(0, 8)}</code>
+                    <small>{formatDate(item.created_at)}</small>
                   </button>
                 ))}
-                {files.length === 0 && <p className="empty">运行完成后显示文件。</p>}
               </div>
-              <pre className="code-view">
-                {activeContent || "选择左侧文件查看内容。"}
-              </pre>
-            </div>
+
+              <div className="tabs">
+                <button
+                  className={activeTab === "findings" ? "active" : ""}
+                  onClick={() => setActiveTab("findings")}
+                >
+                  Findings <b>{findings.length}</b>
+                </button>
+                <button
+                  className={activeTab === "timeline" ? "active" : ""}
+                  onClick={() => setActiveTab("timeline")}
+                >
+                  Timeline <b>{events.length}</b>
+                </button>
+                <button
+                  className={activeTab === "report" ? "active" : ""}
+                  onClick={() => setActiveTab("report")}
+                >
+                  Report
+                </button>
+              </div>
+
+              {activeTab === "findings" && (
+                <section className="tab-panel">
+                  <div className="filter-row">
+                    <button
+                      className={severityFilter === "all" ? "active" : ""}
+                      onClick={() => setSeverityFilter("all")}
+                    >
+                      All {findings.length}
+                    </button>
+                    {SEVERITIES.map((severity) => (
+                      <button
+                        className={severityFilter === severity ? "active" : ""}
+                        key={severity}
+                        onClick={() => setSeverityFilter(severity)}
+                      >
+                        {severity} {severityCounts[severity]}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="finding-list">
+                    {visibleFindings.map((finding, index) => (
+                      <article className={`finding ${finding.severity}`} key={finding.id}>
+                        <div className="finding-index">{String(index + 1).padStart(2, "0")}</div>
+                        <div className="finding-body">
+                          <div className="finding-head">
+                            <span>{finding.severity}</span>
+                            <span>{finding.category}</span>
+                            <code>
+                              {finding.file_path ?? "project"}
+                              {finding.line ? `:${finding.line}` : ""}
+                            </code>
+                          </div>
+                          <h3>{finding.title}</h3>
+                          <p>{finding.evidence}</p>
+                          <div className="finding-note">
+                            <strong>影响</strong>
+                            <span>{finding.impact}</span>
+                          </div>
+                          <div className="finding-note">
+                            <strong>建议</strong>
+                            <span>{finding.recommendation}</span>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                    {visibleFindings.length === 0 && (
+                      <div className="empty-state">
+                        {analysis?.status === "completed"
+                          ? "当前筛选条件下没有发现问题。"
+                          : "分析完成后将在这里显示问题。"}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {activeTab === "timeline" && (
+                <section className="tab-panel timeline">
+                  {events.map((event) => (
+                    <article key={event.id}>
+                      <span className="timeline-time">
+                        {analysis?.started_at
+                          ? `+${formatDuration(
+                              Date.parse(event.created_at) -
+                                Date.parse(analysis.started_at),
+                            )}`
+                          : "—"}
+                      </span>
+                      <i />
+                      <div>
+                        <div className="timeline-head">
+                          <strong>{AGENT_LABELS[event.agent] ?? event.agent}</strong>
+                          <code>{event.event_type}</code>
+                        </div>
+                        <p>{event.message}</p>
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              )}
+
+              {activeTab === "report" && (
+                <section className="tab-panel report-panel">
+                  <div className="report-toolbar">
+                    <span>{artifacts.length} artifacts</span>
+                    {analysis?.status === "completed" && (
+                      <button className="outline-button" onClick={downloadReport}>
+                        下载 Markdown
+                      </button>
+                    )}
+                  </div>
+                  <pre>{report || "分析完成后生成报告。"}</pre>
+                </section>
+              )}
+            </>
           ) : (
-            <pre className="diff-view">{diff?.patch || "运行完成后显示 Diff。"}</pre>
+            <div className="landing">
+              <span className="landing-number">01—06</span>
+              <h1>Read the repository.<br />Find what matters.</h1>
+              <p>
+                输入一个公开 Git 仓库地址。六个 Agent 将从结构、架构、测试、安全和质量方向依次形成证据，并由主 Agent 汇总为可下载审查报告。
+              </p>
+            </div>
           )}
-          <div className="artifact-list">
-            {artifacts.map((artifact) => (
-              <div className="artifact" key={artifact.id}>
-                <strong>{artifact.kind}</strong>
-                <span>{artifact.name}</span>
-              </div>
-            ))}
-          </div>
         </section>
       </div>
     </main>

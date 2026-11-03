@@ -1,4 +1,4 @@
-"""多 Agent 软件开发协作平台后端。"""
+"""RepoGraph 多 Agent Git 仓库静态审查平台。"""
 
 from __future__ import annotations
 
