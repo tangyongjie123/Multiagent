@@ -138,6 +138,7 @@ tests/          Python 自动化测试
 - [依赖与运行环境](docs/DEPENDENCIES.md)
 - [环境变量](docs/ENVIRONMENT_VARIABLES.md)
 - [PostgreSQL 设计](docs/DATABASE.md)
+- [PostgreSQL 数据维护](docs/DATABASE_MAINTENANCE.md)
 - [Neo4j 图谱设计](docs/GRAPH_DATABASE.md)
 - [前端说明](docs/FRONTEND.md)
 - [实现状态](docs/IMPLEMENTATION_STATUS.md)

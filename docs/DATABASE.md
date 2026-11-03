@@ -131,6 +131,8 @@ AUTO_CREATE_TABLES=true
 
 生产环境应关闭自动建表并使用 Alembic。注意：当前重构只新增新表，没有自动删除旧版代码生成项目遗留的表，也不会删除其中的数据。确认旧数据不需要后，应由维护者单独执行迁移或清理。
 
+旧版 `projects`、`runs`、`agent_events` 和 `artifacts` 已在 2026-11-03 的受控维护中备份并删除。具体操作和回滚边界见 `docs/DATABASE_MAINTENANCE.md`。
+
 本地 PostgreSQL 可通过 Compose 启动：
 
 ```powershell
