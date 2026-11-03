@@ -437,6 +437,18 @@ button:disabled {
   color: #d8ff55;
 }
 
+.hero-metric strong.state {
+  color: #174b35;
+}
+
+.hero-metric strong.state-live {
+  color: #6b5200;
+}
+
+.hero-metric strong.state-bad {
+  color: #8b2525;
+}
+
 .mono {
   font-family: "Cascadia Code", monospace;
   font-size: 14px !important;

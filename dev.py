@@ -75,7 +75,15 @@ def stop_processes(
     for name, process in reversed(processes):
         if process.poll() is None:
             log(f"正在停止 {name}...")
-            process.terminate()
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    capture_output=True,
+                    check=False,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            else:
+                process.terminate()
     for name, process in reversed(processes):
         try:
             process.wait(timeout=5)
