@@ -2001,7 +2001,16 @@ button:disabled {
 
 .chat-turn.generating .chat-turn-content {
   color: #7a8177;
-  animation: pulse 1.3s infinite;
+}
+
+.chat-thinking-copy > i {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  background: #6f8367;
+  animation: stream-cursor 900ms steps(1) infinite;
 }
 
 .chat-evidence {
@@ -2300,6 +2309,12 @@ button:disabled {
 @keyframes pulse {
   50% {
     opacity: 0.25;
+  }
+}
+
+@keyframes stream-cursor {
+  50% {
+    opacity: 0;
   }
 }
 

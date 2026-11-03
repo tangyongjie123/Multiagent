@@ -54,6 +54,7 @@ Git URL
 - 提供顶栏“AI 助手”独立入口，可进入全屏聊天工作区，在已完成的仓库分析上追问、解释问题并生成修复计划。
 - 聊天由主 Agent 调度 Intent、Conversation 和 Evidence Verifier 三个专业 Agent，回答只引用已有 Finding。
 - 聊天过程通过独立 SSE 事件流展示，并按事件序号增量续传。
+- Conversation Agent 使用模型流式输出，正文通过 `chat.answer.delta` 增量到达前端；界面同时显示当前正在工作的 Agent 和阶段。
 - 聊天会话、消息、模型用量、Finding 引用和执行事件均持久化到 PostgreSQL。
 - 聊天助手提供当前分析上下文、最近对话、居中问题建议、Markdown 回答和可展开引用证据。
 - 在 MCP、分析问题、聊天证据、回答和引用摘要之间复用统一敏感信息脱敏逻辑。

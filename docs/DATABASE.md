@@ -188,7 +188,7 @@ Windows 默认 Proactor 事件循环不兼容当前 psycopg 异步模式，因�
 | `id` | 自增主键 |
 | `session_id` | 所属聊天会话 |
 | `sequence` | 会话内单调递增序号 |
-| `event_type` | 例如 `chat.main.decision`、`chat.completed` |
+| `event_type` | 例如 `chat.main.decision`、`chat.answer.delta`、`chat.completed` |
 | `agent` | 聊天主 Agent 或专业 Agent |
 | `message` | 中文可读信息 |
 | `data` | JSONB 扩展信息，例如 Token 用量和消息 ID |

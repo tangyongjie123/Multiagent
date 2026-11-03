@@ -152,6 +152,8 @@ fail
 
 模型必须区分建议与已验证事实；没有证据时明确说明，不能声称执行过测试、构建或目标仓库代码。
 
+Conversation Agent 使用流式模型响应。服务在 JSON 尚未完整时逐步提取 `answer` 字符串，将可读正文拆成 `chat.answer.delta` 事件；回答完成后仍会用完整 JSON 校验 `cited_finding_ids` 和 `insufficient_evidence`。流式增量在发送前经过脱敏，最终消息仍会再次脱敏并覆盖为完整回答。
+
 ### Evidence Verifier Agent
 
 输入：Conversation Agent 的答案和原始可用证据。

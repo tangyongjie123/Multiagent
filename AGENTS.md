@@ -118,7 +118,7 @@ Git URL
 
 - 证据聊天 MVP 已接入主 Agent、Intent Agent、Conversation Agent 和 Evidence Verifier Agent。
 - 聊天主 Agent 仍是确定性 LangGraph 路由；Intent 和 Conversation 可以调用聊天模型，Evidence Verifier 不调用模型。
-- 聊天消息通过后台任务生成，状态和 Agent 事件写入 PostgreSQL，并通过 SSE 增量展示。
+- 聊天消息通过后台任务生成，Agent 阶段和 `chat.answer.delta` 正文增量均写入 PostgreSQL，并通过 SSE 实时展示。
 - 同一会话在助手生成期间不得接受并发提问。
 - 聊天回答必须引用已有 Finding、文件证据或明确说明证据不足。
 - 聊天当前只基于已完成分析和已有 Finding，不直接读取完整仓库，也不使用 Milvus 按需索引。

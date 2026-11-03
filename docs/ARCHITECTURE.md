@@ -270,11 +270,13 @@ stateDiagram-v2
 
 - 主 Agent 使用确定性 LangGraph 路由，只按 Intent、Conversation、Evidence Verifier 顺序推进。
 - Intent Agent 识别 `ask_follow_up`、`explain_finding`、`remediation_plan` 或 `clarify`。
-- Conversation Agent 使用最近消息、分析摘要和最多 50 条 Finding 生成中文 JSON 回答。
+- Conversation Agent 使用最近消息、分析摘要和最多 50 条 Finding 生成中文 JSON 回答，并从流式 JSON 中逐步提取 `answer` 字段。
 - Evidence Verifier 是确定性校验器，只保留真实存在且由回答声明的 Finding ID。
 - 没有有效引用时，回答必须明确提示证据不足。
 - 聊天不直接读取完整仓库，不调用 Shell、测试或构建命令，也不伪造执行结果。
 - 模型输入、回答、Finding 引用摘要和失败信息统一经过脱敏。
+- 回答正文按行或安全长度拆为 `chat.answer.delta` 事件；前端在最终完成前即可看到逐步输出。
+- 界面只展示 Agent 阶段和可观测执行状态，不展示模型隐藏推理。
 
 当前聊天 API：
 
@@ -288,4 +290,4 @@ stateDiagram-v2
 | `GET /api/v1/chat/sessions/{id}/events` | 回放聊天事件 |
 | `GET /api/v1/chat/sessions/{id}/events/stream` | 通过 SSE 增量推送聊天事件 |
 
-聊天事件使用 `chat.turn.queued`、`chat.turn.started`、`chat.main.decision`、`chat.agent.started`、`chat.agent.completed`、`chat.agent.failed`、`chat.completed` 和 `chat.failed`。SSE 支持 `after_sequence`，连续提问时只订阅新一轮开始后的事件。
+聊天事件使用 `chat.turn.queued`、`chat.turn.started`、`chat.main.decision`、`chat.agent.started`、`chat.agent.completed`、`chat.agent.failed`、`chat.answer.delta`、`chat.completed` 和 `chat.failed`。SSE 支持 `after_sequence`，连续提问时只订阅新一轮开始后的事件。

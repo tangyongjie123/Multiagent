@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -20,6 +20,7 @@ const CHAT_STREAM_EVENTS = [
   "chat.agent.started",
   "chat.agent.completed",
   "chat.agent.failed",
+  "chat.answer.delta",
   "chat.completed",
   "chat.failed",
 ];
@@ -64,6 +65,11 @@ function responsePreview(value: string): string {
   return value.length > 52 ? `${value.slice(0, 52)}…` : value;
 }
 
+function eventText(event: ChatEvent, key: string): string {
+  const value = event.data[key];
+  return typeof value === "string" ? value : "";
+}
+
 export function ChatWorkspace({
   repository,
   analysis,
@@ -80,6 +86,7 @@ export function ChatWorkspace({
   const [running, setRunning] = useState(false);
   const [eventCursor, setEventCursor] = useState(0);
   const [error, setError] = useState("");
+  const seenEventIds = useRef<Set<number>>(new Set());
 
   const canChat = Boolean(repository && analysis?.status === "completed");
   const latestEvent = events[events.length - 1];
@@ -121,7 +128,27 @@ export function ChatWorkspace({
             [message.id, await api.chatCitations(message.id)] as const,
         ),
       );
-      setMessages(nextMessages);
+      const streamedByMessage = new Map<string, string>();
+      for (const event of nextEvents) {
+        if (event.event_type !== "chat.answer.delta") continue;
+        const messageId = eventText(event, "assistant_message_id");
+        if (!messageId) continue;
+        streamedByMessage.set(
+          messageId,
+          `${streamedByMessage.get(messageId) ?? ""}${eventText(event, "delta")}`,
+        );
+      }
+      seenEventIds.current = new Set(nextEvents.map((event) => event.id));
+      setMessages(
+        nextMessages.map((message) =>
+          message.status === "generating" && streamedByMessage.has(message.id)
+            ? {
+                ...message,
+                content: streamedByMessage.get(message.id) ?? message.content,
+              }
+            : message,
+        ),
+      );
       setEvents(nextEvents);
       setCitations(Object.fromEntries(entries));
       setEventCursor(nextEvents[nextEvents.length - 1]?.sequence ?? 0);
@@ -145,6 +172,7 @@ export function ChatWorkspace({
     setRunning(false);
     setEventCursor(0);
     setError("");
+    seenEventIds.current.clear();
     if (!repository || !analysis) {
       setSessions([]);
       return;
@@ -202,17 +230,32 @@ export function ChatWorkspace({
 
     const onEvent = (message: MessageEvent<string>) => {
       const event = JSON.parse(message.data) as ChatEvent;
+      if (seenEventIds.current.has(event.id)) return;
+      seenEventIds.current.add(event.id);
       setEvents((current) =>
-        current.some((item) => item.id === event.id)
-          ? current
-          : [...current, event].sort((a, b) => a.sequence - b.sequence),
+        [...current, event].sort((a, b) => a.sequence - b.sequence),
       );
-      void refresh();
+      if (event.event_type === "chat.answer.delta") {
+        const messageId = eventText(event, "assistant_message_id");
+        const delta = eventText(event, "delta");
+        if (messageId && delta) {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === messageId
+                ? { ...message, content: `${message.content}${delta}` }
+                : message,
+            ),
+          );
+        }
+        return;
+      }
       if (["chat.completed", "chat.failed"].includes(event.event_type)) {
-        setRunning(false);
-        setEventCursor(event.sequence);
-        stream.close();
-        void loadSessions();
+        void refresh().finally(() => {
+          setRunning(false);
+          setEventCursor(event.sequence);
+          stream.close();
+          void loadSessions();
+        });
       }
     };
 
@@ -236,6 +279,7 @@ export function ChatWorkspace({
     setInput("");
     setEventCursor(0);
     setError("");
+    seenEventIds.current.clear();
   }
 
   async function sendMessage(event: React.FormEvent): Promise<void> {
@@ -262,6 +306,7 @@ export function ChatWorkspace({
         sessionId = session.id;
         setActiveSessionId(sessionId);
         setEvents([]);
+        seenEventIds.current.clear();
         setSessions((current) => [
           session,
           ...current.filter((item) => item.id !== session.id),
@@ -417,7 +462,16 @@ export function ChatWorkspace({
                     </div>
                     <div className="chat-turn-content">
                       {message.status === "generating" ? (
-                        "正在检索分析证据并组织回答…"
+                        <div className="chat-thinking-copy">
+                          {message.content ? (
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {message.content}
+                            </ReactMarkdown>
+                          ) : (
+                            "正在检索分析证据并组织回答…"
+                          )}
+                          <i />
+                        </div>
                       ) : message.role === "user" ? (
                         message.content
                       ) : (
@@ -464,13 +518,15 @@ export function ChatWorkspace({
           </div>
         )}
 
-        {running && latestEvent && (
+        {running && (
           <div className="chat-agent-status">
             <i />
             <strong>
-              {AGENT_SHORT_LABELS[latestEvent.agent] ?? latestEvent.agent}
+              {latestEvent
+                ? (AGENT_SHORT_LABELS[latestEvent.agent] ?? latestEvent.agent)
+                : "Main Agent"}
             </strong>
-            <span>{latestEvent.message}</span>
+            <span>{latestEvent?.message ?? "正在理解问题并准备分析证据…"}</span>
           </div>
         )}
 

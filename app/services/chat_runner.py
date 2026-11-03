@@ -94,14 +94,26 @@ async def run_chat_turn(
             message: str,
             data: dict[str, Any],
         ) -> None:
-            await _emit_event(session_id, event_type, role, message, data)
+            await _emit_event(
+                session_id,
+                event_type,
+                role,
+                message,
+                {
+                    **data,
+                    "assistant_message_id": str(assistant_message_id),
+                },
+            )
 
         await _emit_event(
             session_id,
             "chat.turn.started",
             AgentRole.MAIN,
             "主 Agent 已启动聊天处理",
-            {"user_message_id": str(user_message_id)},
+            {
+                "user_message_id": str(user_message_id),
+                "assistant_message_id": str(assistant_message_id),
+            },
         )
         executor = ChatAgentExecutor(emitter)
         graph = build_chat_graph(executor, get_checkpointer())

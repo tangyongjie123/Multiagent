@@ -359,6 +359,7 @@ async def stream_chat_events(
                     }
                 if finished:
                     return
-            await asyncio.sleep(1)
+            # 聊天回答包含增量文本，使用较短间隔降低“思考中”状态的可见延迟。
+            await asyncio.sleep(0.25)
 
     return EventSourceResponse(event_generator())
