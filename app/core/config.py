@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     auto_create_tables: bool = True
 
     git_allowed_hosts: str = "github.com,gitee.com,gitlab.com"
+    git_executable: str | None = None
     git_clone_timeout_seconds: int = Field(default=180, ge=10, le=600)
     git_max_repository_mb: int = Field(default=200, ge=1, le=2_000)
     git_max_files: int = Field(default=10_000, ge=100, le=100_000)

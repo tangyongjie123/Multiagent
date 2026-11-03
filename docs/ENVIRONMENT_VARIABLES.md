@@ -27,6 +27,7 @@
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `GIT_ALLOWED_HOSTS` | `github.com,gitee.com,gitlab.com` | 允许浅克隆的主机白名单 |
+| `GIT_EXECUTABLE` | 空 | 可选，Git 完整路径；用于 IDE 进程的 `PATH` 不包含 Git 的情况 |
 | `GIT_CLONE_TIMEOUT_SECONDS` | `180` | 克隆超时，范围 10 至 600 秒 |
 | `GIT_MAX_REPOSITORY_MB` | `200` | 扫描仓库体积上限 |
 | `GIT_MAX_FILES` | `10000` | 扫描文件总数上限 |
@@ -34,6 +35,12 @@
 | `GIT_ANALYSIS_MAX_FILE_CHARS` | `20000` | 单个源码文件读取字符上限 |
 
 `GIT_ALLOWED_HOSTS` 用于基础 SSRF 防护，不应用来允许任意第三方域名。公开仓库地址中禁止包含用户名或密码。
+
+后端会依次从 `GIT_EXECUTABLE`、系统 `PATH` 和 Windows 常见 Git 安装目录查找可执行文件。若从 PyCharm 启动时出现 `[WinError 2]`，优先填写：
+
+```dotenv
+GIT_EXECUTABLE=C:\Program Files\Git\cmd\git.exe
+```
 
 ## 3. Chat 模型
 

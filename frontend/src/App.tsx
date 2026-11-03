@@ -470,7 +470,11 @@ export default function App() {
                   <strong className={statusClass(analysis?.status ?? "pending")}>
                     {analysis?.status ?? "等待分析"}
                   </strong>
-                  <small>{analysis?.summary ?? "选择历史运行或启动新分析"}</small>
+                  <small>
+                    {analysis?.summary ??
+                      analysis?.error_message ??
+                      "选择历史运行或启动新分析"}
+                  </small>
                 </article>
                 <article className="metric">
                   <span>Elapsed</span>

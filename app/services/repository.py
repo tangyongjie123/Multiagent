@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -67,6 +68,35 @@ SAFE_BRANCH = re.compile(r"^[A-Za-z0-9._/-]+$")
 
 class RepositoryError(RuntimeError):
     """Git 仓库无法克隆或扫描。"""
+
+
+def resolve_git_executable() -> str:
+    """从配置、PATH 或 Windows 常见目录定位 Git。"""
+
+    configured = get_settings().git_executable
+    if configured and configured.strip():
+        candidate = Path(configured.strip().strip('"'))
+        if candidate.is_file():
+            return str(candidate)
+        raise RepositoryError(f"GIT_EXECUTABLE 指向的文件不存在：{candidate}")
+
+    discovered = shutil.which("git")
+    if discovered:
+        return discovered
+
+    if sys.platform == "win32":
+        candidates = [
+            Path(os.environ.get("PROGRAMFILES", "")) / "Git/cmd/git.exe",
+            Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Git/cmd/git.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/Git/cmd/git.exe",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
+
+    raise RepositoryError(
+        "未找到 Git。请安装 Git，或在 .env 中配置 GIT_EXECUTABLE"
+    )
 
 
 @dataclass
@@ -140,9 +170,10 @@ async def clone_repository(
     normalized_url, _ = validate_repository_url(url)
     if branch and (not SAFE_BRANCH.fullmatch(branch) or branch.startswith("-")):
         raise RepositoryError("Git 分支名称不合法")
+    git_executable = resolve_git_executable()
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    command = ["git", "clone", "--depth", "1", "--single-branch"]
+    command = [git_executable, "clone", "--depth", "1", "--single-branch"]
     if branch:
         command.extend(["--branch", branch])
     command.extend([normalized_url, str(destination)])
@@ -258,8 +289,9 @@ async def scan_repository(root: Path) -> RepositorySnapshot:
 def _read_commit_sync(root: Path) -> str | None:
     if not (root / ".git").exists():
         return None
+    git_executable = resolve_git_executable()
     completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+        [git_executable, "rev-parse", "HEAD"],
         cwd=root,
         capture_output=True,
         text=True,

@@ -1,11 +1,14 @@
 """Git URL 校验和仓库静态扫描测试。"""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+import app.services.repository as repository_module
 from app.services.repository import (
     RepositoryError,
+    resolve_git_executable,
     scan_repository,
     validate_repository_url,
 )
@@ -22,6 +25,35 @@ def test_git_url_validation() -> None:
         validate_repository_url("https://token@github.com/example/project.git")
     with pytest.raises(RepositoryError):
         validate_repository_url("https://example.com/project.git")
+
+
+def test_configured_git_executable_is_used(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / "git.exe"
+    executable.write_bytes(b"stub")
+    monkeypatch.setattr(
+        repository_module,
+        "get_settings",
+        lambda: SimpleNamespace(git_executable=str(executable)),
+    )
+
+    assert resolve_git_executable() == str(executable)
+
+
+def test_missing_configured_git_executable_is_reported(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        repository_module,
+        "get_settings",
+        lambda: SimpleNamespace(git_executable=str(tmp_path / "missing-git.exe")),
+    )
+
+    with pytest.raises(RepositoryError, match="GIT_EXECUTABLE"):
+        resolve_git_executable()
 
 
 @pytest.mark.asyncio

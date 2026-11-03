@@ -90,6 +90,7 @@ npm run build
 ## 6. 系统工具
 
 - Git：用于浅克隆公开仓库，需要可从终端直接执行 `git`。
+- 如果 IDE 启动的后端进程找不到 Git，可在 `.env` 设置 `GIT_EXECUTABLE` 为完整路径。
 - Docker：可选，用于本地启动 PostgreSQL；也可以使用已有 PostgreSQL。
 - Milvus 与 Neo4j：可选，运行在用户维护的虚拟机或 Docker 环境中。
 - MCP 工具服务：随 FastAPI 进程启动，默认地址为 `http://127.0.0.1:8000/mcp/`。
