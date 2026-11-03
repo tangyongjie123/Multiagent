@@ -20,6 +20,7 @@ from app.agents.tools import (
     TEST_TOOLS,
     RepositoryToolRunner,
     build_langchain_tools,
+    normalize_tool_name,
 )
 from app.core.config import get_settings
 from app.domain.models import (
@@ -380,10 +381,26 @@ class RepositoryAnalysisExecutor:
                         )
                     )
                     continue
-                tool_name = str(tool_call.get("name") or "")
+                requested_tool_name = str(tool_call.get("name") or "")
+                tool_name = normalize_tool_name(requested_tool_name)
                 selected_tool = tools_by_name.get(tool_name)
                 if selected_tool is None:
-                    raise ValueError(f"模型请求了未授权工具：{tool_name}")
+                    available_tools = sorted(tools_by_name)
+                    await runner.report_unknown_tool(requested_tool_name, available_tools)
+                    messages.append(
+                        ToolMessage(
+                            content=json.dumps(
+                                {
+                                    "error": f"未知工具：{requested_tool_name}",
+                                    "allowed_tools": available_tools,
+                                },
+                                ensure_ascii=False,
+                            ),
+                            tool_call_id=str(tool_call.get("id") or ""),
+                            name=requested_tool_name,
+                        )
+                    )
+                    continue
                 arguments = tool_call.get("args")
                 if not isinstance(arguments, dict):
                     raise ValueError(f"工具 {tool_name} 的参数不是对象")

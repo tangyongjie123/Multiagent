@@ -10,7 +10,12 @@ import pytest
 
 import app.agents.tools as agent_tools
 import app.mcp.server as mcp_server_module
-from app.agents.tools import ARCHITECTURE_TOOLS, RepositoryToolRunner, build_langchain_tools
+from app.agents.tools import (
+    ARCHITECTURE_TOOLS,
+    RepositoryToolRunner,
+    build_langchain_tools,
+    normalize_tool_name,
+)
 from app.domain.models import AgentRole
 
 
@@ -32,6 +37,12 @@ def _build_workspace(tmp_path: Path) -> Path:
     ignored.mkdir(parents=True)
     (ignored / "index.js").write_text("const ignored = true;", encoding="utf-8")
     return root
+
+
+def test_common_model_tool_name_is_normalized() -> None:
+    assert normalize_tool_name("read_repository_tree") == "list_repository_tree"
+    assert normalize_tool_name("read_file") == "read_repository_file"
+    assert normalize_tool_name("search_repository_code") == "search_repository_code"
 
 
 @pytest.mark.asyncio

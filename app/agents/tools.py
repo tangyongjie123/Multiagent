@@ -32,6 +32,13 @@ QUALITY_TOOLS = {
 }
 TEST_TOOLS = {"find_related_tests"}
 SECURITY_TOOLS = {"run_static_rules"}
+TOOL_ALIASES = {
+    "read_repository_tree": "list_repository_tree",
+    "list_repository_files": "list_repository_tree",
+    "read_file": "read_repository_file",
+    "search_code": "search_repository_code",
+    "find_tests": "find_related_tests",
+}
 
 
 class ListTreeInput(BaseModel):
@@ -74,6 +81,7 @@ class RepositoryToolRunner:
         self.call_count = 0
 
     async def call(self, tool_name: str, arguments: dict[str, Any]) -> str:
+        tool_name = normalize_tool_name(tool_name)
         if tool_name not in self.allowed_tools:
             raise PermissionError(f"{self.role.value} Agent 不允许调用 {tool_name}")
         settings = get_settings()
@@ -126,6 +134,23 @@ class RepositoryToolRunner:
         if not isinstance(payload, dict):
             raise ValueError(f"MCP 工具 {tool_name} 未返回 JSON 对象")
         return payload
+
+    async def report_unknown_tool(
+        self,
+        tool_name: str,
+        available_tools: list[str],
+    ) -> None:
+        """记录模型请求了未知工具，由模型下一轮自行纠正。"""
+
+        await self._emit(
+            "tool.failed",
+            f"模型请求了未知 MCP 工具：{tool_name}",
+            {
+                "tool": tool_name,
+                "error_type": "UnknownTool",
+                "available_tools": available_tools,
+            },
+        )
 
     async def _emit(self, event_type: str, message: str, data: dict[str, Any]) -> None:
         if self.event_emitter is not None:
@@ -241,3 +266,9 @@ def _safe_value(value: Any) -> Any:
             for key, item in list(value.items())[:20]
         }
     return str(value)[:300]
+
+
+def normalize_tool_name(tool_name: str) -> str:
+    """兼容模型常见的工具名称幻觉。"""
+
+    return TOOL_ALIASES.get(tool_name, tool_name)
