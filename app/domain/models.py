@@ -19,6 +19,9 @@ class AgentRole(StrEnum):
     SECURITY = "security"
     QUALITY = "quality"
     REPORT = "report"
+    INTENT = "intent"
+    CONVERSATION = "conversation"
+    EVIDENCE_VERIFIER = "evidence_verifier"
 
 
 class AnalysisStatus(StrEnum):
@@ -53,6 +56,15 @@ class ChatMessageStatus(StrEnum):
     GENERATING = "generating"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class ChatIntent(StrEnum):
+    """Chat Agent 支持的用户意图。"""
+
+    ASK_FOLLOW_UP = "ask_follow_up"
+    EXPLAIN_FINDING = "explain_finding"
+    REMEDIATION_PLAN = "remediation_plan"
+    CLARIFY = "clarify"
 
 
 class FindingSeverity(StrEnum):

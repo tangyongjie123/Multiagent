@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     mcp_tool_timeout_seconds: int = Field(default=20, ge=1, le=120)
     agent_max_tool_calls: int = Field(default=3, ge=1, le=30)
     agent_max_tool_rounds: int = Field(default=3, ge=1, le=10)
+    chat_history_messages: int = Field(default=12, ge=2, le=50)
+    chat_token_budget: int = Field(default=60_000, gt=0)
 
     # 对话模型配置；DeepSeek 是默认提供方。
     deepseek_api_key: SecretStr | None = None

@@ -34,6 +34,8 @@ app/agents/prompts.py
 | `QUALITY_SYSTEM_PROMPT` | Quality Agent 的质量检查范围 |
 | `TOOL_POLICY_PROMPT` | MCP 只读工具、证据和预算约束 |
 | `NO_TOOL_FINALIZE_PROMPT` | 工具预算用尽后强制生成最终 JSON |
+| `INTENT_SYSTEM_PROMPT` | 聊天意图分类和 Finding 目标识别 |
+| `CONVERSATION_SYSTEM_PROMPT` | 基于已有证据生成中文聊天回答 |
 
 ## 3. 不调用 LLM 的 Agent
 
@@ -43,9 +45,21 @@ app/agents/prompts.py
 | Test | 文件识别和 `find_related_tests` MCP 工具 |
 | Security | `run_static_rules` 确定性规则 |
 | Report | 汇总结构化结果并渲染 Markdown、HTML 和 SVG |
+| Evidence Verifier | Finding ID 校验、去重和证据不足提示 |
 
 这些 Agent 没有自然语言提示词，修改行为应调整对应服务代码或规则。
 
-## 4. 聊天扩展后的提示词规划
+## 4. 聊天 Agent 提示词
 
-后续新增 Intent、Conversation、Evidence Verifier、Retrieval 和 Remediation Agent 时，仍应把系统提示词集中放在 `app/agents/prompts.py`，不要把提示词散落到路由或 Service 层。
+聊天主 Agent 仍然是确定性路由，没有 LLM 提示词。实际调用模型的聊天 Agent 有两个：
+
+- `Intent Agent`：在 `INTENT_SYSTEM_PROMPT` 约束下输出意图和可选 Finding ID。
+- `Conversation Agent`：在 `CONVERSATION_SYSTEM_PROMPT` 约束下生成中文回答和引用 ID。
+
+Evidence Verifier 不调用模型，因此没有提示词。其确定性逻辑位于：
+
+```text
+app/agents/chat_specialists.py
+```
+
+后续新增 Retrieval 或 Remediation Agent 时，仍应把系统提示词集中放在 `app/agents/prompts.py`，不要把提示词散落到 API、路由或 Service 层。

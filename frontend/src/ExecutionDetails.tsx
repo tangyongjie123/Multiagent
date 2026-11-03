@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { AGENT_LABELS, AGENT_ORDER } from "./agentMeta";
+import { AGENT_LABELS, ANALYSIS_AGENT_ORDER } from "./agentMeta";
 import type { AnalysisEvent } from "./types";
 
 interface ExecutionDetailsProps {
@@ -152,7 +152,7 @@ export function ExecutionDetails({
 }: ExecutionDetailsProps) {
   const traces = useMemo<AgentTrace[]>(
     () =>
-      AGENT_ORDER.map((agent) => {
+      ANALYSIS_AGENT_ORDER.map((agent) => {
         const agentEvents = events.filter((event) => event.agent === agent);
         return {
           agent,

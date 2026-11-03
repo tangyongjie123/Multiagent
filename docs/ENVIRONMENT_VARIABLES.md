@@ -31,6 +31,8 @@ DEEPSEEK_PRO_MODEL=deepseek-reasoner
 | `MCP_TOOL_TIMEOUT_SECONDS` | `20` | 单次 MCP 工具调用超时 |
 | `AGENT_MAX_TOOL_CALLS` | `3` | 单个 Agent 最大 MCP 工具调用次数 |
 | `AGENT_MAX_TOOL_ROUNDS` | `3` | 最大工具推理轮数 |
+| `CHAT_HISTORY_MESSAGES` | `12` | 聊天模型可读取的最近已完成消息数，范围 2 至 50 |
+| `CHAT_TOKEN_BUDGET` | `60000` | 单轮聊天输入与输出 Token 上限 |
 
 ## 2. Git 仓库访问
 
@@ -82,6 +84,8 @@ MCP_TOOL_URL=http://127.0.0.1:8000/mcp/
 MCP_TOOL_TIMEOUT_SECONDS=20
 AGENT_MAX_TOOL_CALLS=3
 AGENT_MAX_TOOL_ROUNDS=3
+CHAT_HISTORY_MESSAGES=12
+CHAT_TOKEN_BUDGET=60000
 ```
 
 MCP 服务默认挂载到 FastAPI 的 `/mcp/` 路径，不需要单独端口。修改 `APP_PORT` 后，如果显式设置了 `MCP_TOOL_URL`，必须同步修改该地址。
@@ -159,7 +163,7 @@ NEO4J_PASSWORD=replace-with-neo4j-password
 | 服务 | MVP 主链路 | 当前用途 |
 | --- | --- | --- |
 | PostgreSQL | 必需 | 业务状态、事件、问题、产物和 checkpoint |
-| Chat API | 必需 | Architecture 和 Quality 的真实推理 |
+| Chat API | 必需 | Architecture、Quality 和聊天 Agent 的真实推理 |
 | Git | 必需 | 本地浅克隆公开仓库 |
 | Milvus | 可选 | 当前仅健康检查和后续向量检索基础 |
 | Neo4j | 可选 | 当前仅连接、约束和后续图谱基础 |

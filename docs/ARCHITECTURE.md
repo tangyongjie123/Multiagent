@@ -18,15 +18,24 @@ flowchart LR
     L --> SE[Security Agent]
     L --> Q[Quality Agent]
     L --> RP[Report Agent]
+    A --> CR[Chat Runner]
+    CR --> CL[LangGraph Chat Supervisor]
+    CL --> IA[Intent Agent]
+    CL --> CA[Conversation Agent]
+    CL --> EV[Evidence Verifier]
     AR <-->|MCP Streamable HTTP| MT[MCP 只读工具服务]
     T <-->|MCP Streamable HTTP| MT
     SE <-->|MCP Streamable HTTP| MT
     Q <-->|MCP Streamable HTTP| MT
     MT --> W
     S --> P[(PostgreSQL)]
+    CR --> P
     L --> C[(LangGraph Checkpoint)]
+    CL --> C
     AR --> M[OpenAI 兼容模型]
     Q --> M
+    IA --> M
+    CA --> M
     S -.规划中.-> V[(Milvus)]
     S -.规划中.-> N[(Neo4j)]
 ```
@@ -39,6 +48,14 @@ React -> FastAPI -> Analysis Runner -> Git 浅克隆 -> 仓库扫描
       -> MCP Streamable HTTP 只读工具 -> PostgreSQL 产物与事件
 ```
 
+分析完成后，聊天链路为：
+
+```text
+React -> FastAPI -> Chat Runner -> 加载最近完成分析与 Finding
+      -> LangGraph 聊天主 Agent -> Intent -> Conversation
+      -> Evidence Verifier -> PostgreSQL 消息、引用与事件 -> SSE
+```
+
 Milvus 和 Neo4j 已完成配置、健康检查与基础连接生命周期，但尚未接入分析主链路。
 
 ## 2. 代码分层
@@ -49,11 +66,15 @@ Milvus 和 Neo4j 已完成配置、健康检查与基础连接生命周期，但
 | `app/api/` | REST 接口、请求校验和响应模型 |
 | `app/agents/supervisor.py` | 主 Agent、LangGraph 状态与合法路由 |
 | `app/agents/specialists.py` | 六个专业 Agent 的具体分析逻辑 |
+| `app/agents/chat_specialists.py` | Intent、Conversation 和 Evidence Verifier 三个聊天 Agent |
 | `app/agents/schemas.py` | Architecture 和 Quality 的结构化输出协议 |
 | `app/services/repository.py` | URL 校验、克隆、扫描和进程清理 |
 | `app/services/static_analysis.py` | 可复现的安全与质量规则 |
 | `app/services/analysis_runner.py` | 后台执行、取消、心跳、持久化和报告 |
 | `app/services/analysis_events.py` | 事件序号与数据库写入 |
+| `app/services/chat_runner.py` | 聊天工作流、历史消息、Finding 证据和引用持久化 |
+| `app/services/chat_events.py` | 聊天事件序号与数据库写入 |
+| `app/services/redaction.py` | MCP、分析结果、聊天证据与回答的统一脱敏 |
 | `app/mcp/server.py` | 五个 MCP 只读工具、路径沙箱和脱敏 |
 | `app/mcp/client.py` | MCP Streamable HTTP 客户端 |
 | `app/agents/tools.py` | Agent 工具权限、LangChain 包装和工具事件 |
@@ -78,6 +99,9 @@ FastAPI 路由
 | `static_analysis.py` | 可复现的凭证、命令执行、异常和日志规则 |
 | `analysis_events.py` | 单个分析内的事件序号和持久化 |
 | `report_visuals.py` | SVG 图表、内嵌图片 Markdown 和自包含 HTML 报告 |
+| `chat_runner.py` | 加载已完成分析、执行聊天 LangGraph、保存回答和 Finding 引用 |
+| `chat_events.py` | 单个聊天会话内的事件序号和持久化 |
+| `redaction.py` | 证据、聊天内容、引用摘要和失败信息的敏感值替换 |
 
 一次“开始分析”请求的 Service 调用步骤：
 
@@ -205,6 +229,7 @@ React 不自行模拟进度，而是根据真实事件渲染 Agent 轨道、工�
 | PostgreSQL | 仓库、分析、事件、问题、产物元数据 |
 | LangGraph checkpoint | 图节点状态和恢复信息 |
 | 文件工作区 | 克隆仓库、报告、问题 JSON、仓库快照 |
+| PostgreSQL 聊天表 | 聊天会话、消息、Finding 引用和聊天事件 |
 | Milvus | 后续代码和文档向量检索 |
 | Neo4j | 后续代码实体和依赖关系 |
 
@@ -226,15 +251,41 @@ React 不自行模拟进度，而是根据真实事件渲染 Agent 轨道、工�
 - 使用后台任务队列替换 FastAPI 进程内任务，支持多 Worker。
 - 增加数据库迁移和对象存储，支持生产部署。
 
-## 12. 聊天扩展当前进度
+## 12. 聊天工作流
 
-第一阶段已经加入聊天持久化基础：
+聊天当前已经是可运行 MVP，而不是占位接口。只有已完成的分析可以创建聊天消息；同一会话在上一条回答生成期间会拒绝并发提问。
 
-- `chat_sessions`：关联仓库和可选分析结果。
-- `chat_messages`：保存用户消息和未来的助手消息。
-- `POST /api/v1/chat/sessions`：创建会话。
-- `GET /api/v1/chat/sessions`：查询会话。
-- `GET /api/v1/chat/sessions/{id}/messages`：读取消息。
-- `POST /api/v1/chat/sessions/{id}/messages`：保存用户消息。
+```mermaid
+stateDiagram-v2
+    [*] --> Main
+    Main --> Intent
+    Intent --> Main
+    Main --> Conversation
+    Conversation --> Main
+    Main --> EvidenceVerifier
+    EvidenceVerifier --> Main
+    Main --> [*]: finish
+    Main --> [*]: fail
+```
 
-当前接口不会生成助手回答，也不会调用模型。下一步由主 Agent 接入 Intent、Conversation 和 Evidence Verifier Agent 后，再添加聊天 SSE 和前端页面。
+- 主 Agent 使用确定性 LangGraph 路由，只按 Intent、Conversation、Evidence Verifier 顺序推进。
+- Intent Agent 识别 `ask_follow_up`、`explain_finding`、`remediation_plan` 或 `clarify`。
+- Conversation Agent 使用最近消息、分析摘要和最多 50 条 Finding 生成中文 JSON 回答。
+- Evidence Verifier 是确定性校验器，只保留真实存在且由回答声明的 Finding ID。
+- 没有有效引用时，回答必须明确提示证据不足。
+- 聊天不直接读取完整仓库，不调用 Shell、测试或构建命令，也不伪造执行结果。
+- 模型输入、回答、Finding 引用摘要和失败信息统一经过脱敏。
+
+当前聊天 API：
+
+| 接口 | 用途 |
+| --- | --- |
+| `POST /api/v1/chat/sessions` | 创建绑定仓库和已完成分析的会话 |
+| `GET /api/v1/chat/sessions` | 查询会话 |
+| `GET /api/v1/chat/sessions/{id}/messages` | 读取消息 |
+| `POST /api/v1/chat/sessions/{id}/messages` | 保存用户消息并后台启动聊天图 |
+| `GET /api/v1/chat/messages/{id}/citations` | 查询助手回答引用的 Finding |
+| `GET /api/v1/chat/sessions/{id}/events` | 回放聊天事件 |
+| `GET /api/v1/chat/sessions/{id}/events/stream` | 通过 SSE 增量推送聊天事件 |
+
+聊天事件使用 `chat.turn.queued`、`chat.turn.started`、`chat.main.decision`、`chat.agent.started`、`chat.agent.completed`、`chat.agent.failed`、`chat.completed` 和 `chat.failed`。SSE 支持 `after_sequence`，连续提问时只订阅新一轮开始后的事件。

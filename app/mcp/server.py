@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from mcp.server.mcpserver import MCPServer
 
+from app.services.redaction import redact_sensitive_text
 from app.services.repository import (
     IGNORED_DIRECTORIES,
     READABLE_FILE_NAMES,
@@ -21,15 +21,6 @@ from app.services.static_analysis import run_static_analysis
 
 MAX_READ_BYTES = 2 * 1024 * 1024
 MAX_TOOL_OUTPUT_CHARS = 100_000
-# MCP 结果会交给模型，因此在离开服务前先移除常见凭证和私钥。
-SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*[\"']?([^\s\"']{6,})"
-)
-PRIVATE_KEY_BLOCK = re.compile(
-    r"-----BEGIN ([A-Z ]*PRIVATE KEY)-----.*?-----END \1-----",
-    re.DOTALL,
-)
-URL_CREDENTIALS = re.compile(r"(https?://[^/\s:@]+):([^@\s/]+)@")
 
 mcp_server = MCPServer(
     name="RepoGraph Tools",
@@ -330,10 +321,4 @@ def _find_tests(root: Path, target: str, limit: int) -> list[dict[str, Any]]:
 def _redact(content: str) -> str:
     """脱敏常见密钥赋值、URL 凭证和私钥块。"""
 
-    redacted = PRIVATE_KEY_BLOCK.sub("[REDACTED PRIVATE KEY]", content)
-    redacted = SECRET_ASSIGNMENT.sub(
-        lambda match: f"{match.group(1)}=<REDACTED>",
-        redacted,
-    )
-    redacted = URL_CREDENTIALS.sub(r"\1:<REDACTED>@", redacted)
-    return redacted[:MAX_TOOL_OUTPUT_CHARS]
+    return redact_sensitive_text(content)[:MAX_TOOL_OUTPUT_CHARS]

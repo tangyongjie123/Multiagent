@@ -25,6 +25,8 @@ RepoGraph 是一个面向研发团队的 Git 仓库静态审查平台。用户�
 6. 主 Agent 汇总、去重并生成 Markdown 报告。
 7. 前端实时展示执行过程、问题、报告与历史记录。
 8. 用户可在运行结束前取消任务，也可重新分析同一仓库。
+9. 分析完成后，用户可在“Ask AI”中继续追问、解释 Finding 或生成修复计划。
+10. 聊天回答展示所引用的 Finding，并通过 SSE 展示聊天 Agent 执行过程。
 
 ## 4. 产品范围
 
@@ -38,6 +40,7 @@ RepoGraph 是一个面向研发团队的 Git 仓库静态审查平台。用户�
 - critical、major、minor、info 四级严重程度。
 - PostgreSQL 持久化、LangGraph checkpoint、SSE 实时事件。
 - 中文 Web 控制台、Markdown 报告查看与下载。
+- 绑定已完成分析的证据聊天，由主 Agent 调度 Intent、Conversation 和 Evidence Verifier。
 
 ### 4.2 暂不包含
 
@@ -59,6 +62,10 @@ RepoGraph 是一个面向研发团队的 Git 仓库静态审查平台。用户�
 | Security Agent | 检查疑似凭证、私钥、命令执行和基础安全反模式 |
 | Quality Agent | 检查异常处理、日志、可维护性和确定性问题 |
 | Report Agent | 汇总证据、严重级别和建议，生成中文 Markdown |
+| Chat Main Agent | 加载已完成分析，按固定顺序调度三个聊天专业 Agent |
+| Intent Agent | 识别追问、解释问题、修复计划或澄清意图 |
+| Conversation Agent | 只根据当前分析和 Finding 证据生成中文回答 |
+| Evidence Verifier Agent | 校验引用 ID、去除伪证据并标记证据不足 |
 
 约束：
 
@@ -142,6 +149,18 @@ RepoGraph 是一个面向研发团队的 Git 仓库静态审查平台。用户�
 - 单个 Agent 默认最多调用 3 次工具。
 - 不提供 Shell、网络请求、代码执行和仓库写入工具。
 
+### FR-10 证据聊天
+
+- 只有状态为 `completed` 的分析可以创建聊天会话和发送消息。
+- 用户消息先持久化，后台通过 LangGraph 主 Agent 调度 Intent、Conversation 和 Evidence Verifier。
+- Conversation Agent 必须使用结构化 JSON 返回回答、Finding ID 和证据不足标记。
+- Evidence Verifier 只能保留真实存在的 Finding ID，不能信任模型自行编造的证据。
+- 没有有效引用时，回答必须明确说明当前证据不足。
+- 同一聊天会话在助手回答生成期间不得接受并发提问。
+- 聊天事件写入 PostgreSQL，并通过 SSE 实时显示，支持 `after_sequence` 增量续传。
+- 聊天回答和引用只针对已有 Finding；当前不直接读取完整仓库，也不执行测试或构建。
+- 发送给模型的历史消息、分析摘要、Finding 证据、回答和引用摘要必须经过统一脱敏。
+
 ## 7. 数据与知识图谱要求
 
 ### PostgreSQL
@@ -166,6 +185,7 @@ RepoGraph 是一个面向研发团队的 Git 仓库静态审查平台。用户�
 
 - 不执行被审查仓库内容。
 - 不在日志、报告、错误响应和版本控制中泄露密钥。
+- MCP 结果、分析 Finding、聊天模型输入、回答、引用摘要和失败信息使用统一脱敏规则。
 - 限制可克隆主机、下载大小、文件数量和执行时间。
 - 私有仓库功能启用前必须增加凭据托管和权限隔离。
 
@@ -200,11 +220,15 @@ RepoGraph 是一个面向研发团队的 Git 仓库静态审查平台。用户�
 9. 项目文档与实际代码、配置和实现状态一致。
 10. Git 工作区不包含 `.env`、真实密钥、前端依赖目录或构建产物。
 11. MCP Streamable HTTP 能完成真实握手和工具调用，Agent 时间线出现工具事件。
+12. 已完成的公开仓库分析可以通过“Ask AI”获得真实模型回答，并展示至少一条经过校验的 Finding 引用。
+13. 同一聊天会话可以连续提问，后一轮 SSE 不重放前一轮历史事件。
+14. 聊天引用中的模拟密码、Token 和密钥显示为 `<REDACTED>`。
 
 ## 10. 后续阶段
 
-- 第一阶段聊天基础：会话、消息持久化 API；当前已完成，助手生成和前端界面尚未完成。
+- 证据聊天 MVP 已完成：主 Agent、三个聊天专业 Agent、前端页面、SSE、引用和脱敏均已接入。
 - 将扫描后的代码块写入 Milvus，并在架构和质量分析前执行相似代码检索。
+- 在用户对具体代码追问时按需建立 Milvus 索引，减少普通分析等待时间。
 - 将文件、类、方法和依赖写入 Neo4j，并展示可交互依赖图。
 - 增加 Java 语法树和 Maven 依赖解析。
 - 增加分析结果对比、增量扫描和仓库基线。

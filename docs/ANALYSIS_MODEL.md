@@ -112,6 +112,54 @@ fail
 
 输出：中文 Markdown 和自包含 HTML。两者均包含严重级别与分类可视化图片、汇总表，并按架构、测试、安全、质量分组列出问题位置、证据、影响和建议。
 
+### Chat Main Agent
+
+输入：已完成的分析 ID、仓库元数据、最近聊天消息、分析摘要和 Finding 证据。
+
+输出：确定性路由到 Intent、Conversation、Evidence Verifier，最后结束或失败。
+
+聊天主 Agent 与分析主 Agent 一样不调用大模型，只按 LangGraph 声明顺序推进。会话必须绑定已完成分析；同一会话只允许一个回答生成中请求。
+
+### Intent Agent
+
+输入：仓库名、分析摘要、Finding 摘要和用户问题。
+
+输出 Schema：`ChatIntentResult`
+
+```json
+{
+  "intent": "explain_finding",
+  "reason": "用户要求解释已有问题",
+  "target_finding_id": "Finding UUID 或 null"
+}
+```
+
+合法意图为 `ask_follow_up`、`explain_finding`、`remediation_plan` 和 `clarify`。
+
+### Conversation Agent
+
+输入：意图、最近消息、分析摘要、Finding 证据和当前问题。
+
+输出 Schema：`ConversationAnswer`
+
+```json
+{
+  "answer": "中文回答",
+  "cited_finding_ids": ["Finding UUID"],
+  "insufficient_evidence": false
+}
+```
+
+模型必须区分建议与已验证事实；没有证据时明确说明，不能声称执行过测试、构建或目标仓库代码。
+
+### Evidence Verifier Agent
+
+输入：Conversation Agent 的答案和原始可用证据。
+
+输出：最终回答和经过 ID 校验的 Finding 引用。
+
+该 Agent 不调用模型。它删除不存在的 Finding ID 和重复引用；没有有效引用时在回答末尾追加“证据不足”提示。因此模型不能通过编造 UUID 生成伪证据。
+
 ## 3. 问题模型
 
 ```text
@@ -144,6 +192,8 @@ Finding
 - Architecture 只发送 10 个摘要，每个最多 4,000 字符。
 - Quality 只发送 8 个摘要，每个最多 4,000 字符。
 - 默认分析 Token 预算为 120,000。
+- 聊天默认只发送最近 12 条已完成消息，单轮预算为 60,000 Token。
+- 聊天最多加载当前分析最近的 50 条 Finding 作为候选证据。
 - 预算超限后工作流失败并等待用户决定。
 - 不把完整仓库、数据库内容或全部历史对话默认传给模型。
 
@@ -189,4 +239,6 @@ Finding
 - 不解析完整 Java AST 或 Maven 依赖闭包。
 - 不读取 Git 历史、Issue 和 Pull Request。
 - Milvus 检索和 Neo4j 自动建图尚未接入主链路。
+- 聊天当前只基于已有 Finding，不直接读取完整仓库；代码级追问需要后续按需 Milvus 索引。
+- 聊天支持生成修复方案，但不自动修改、提交或推送目标仓库。
 - 大型仓库只分析有限源码摘要，可能遗漏跨文件问题。

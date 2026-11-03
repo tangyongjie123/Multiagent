@@ -83,6 +83,67 @@ export interface Artifact {
   created_at: string;
 }
 
+export type ChatMessageRole = "user" | "assistant";
+export type ChatMessageStatus =
+  | "recorded"
+  | "generating"
+  | "completed"
+  | "failed";
+
+/** 一个绑定仓库和可选分析结果的聊天会话。 */
+export interface ChatSession {
+  id: string;
+  repository_id: string;
+  analysis_id: string | null;
+  title: string;
+  status: "active" | "archived";
+  created_at: string;
+  updated_at: string;
+  last_message_at: string | null;
+}
+
+/** 聊天中的用户或助手消息。 */
+export interface ChatMessage {
+  id: string;
+  session_id: string;
+  role: ChatMessageRole;
+  content: string;
+  status: ChatMessageStatus;
+  model_name: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  created_at: string;
+}
+
+/** 助手回答引用的代码审查证据。 */
+export interface ChatCitation {
+  id: string;
+  message_id: string;
+  finding_id: string | null;
+  source_type: string;
+  file_path: string | null;
+  line: number | null;
+  excerpt: string;
+  created_at: string;
+}
+
+/** 聊天主 Agent 和专业 Agent 的执行事件。 */
+export interface ChatEvent {
+  id: number;
+  session_id: string;
+  sequence: number;
+  event_type: string;
+  agent: string;
+  message: string;
+  data: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ChatTurn {
+  user_message: ChatMessage;
+  assistant_message: ChatMessage;
+}
+
 /** 单个依赖服务的健康状态。 */
 export interface HealthComponent {
   status: "ok" | "not_configured" | "error";

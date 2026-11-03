@@ -36,6 +36,7 @@ from app.domain.models import (
     FindingCategory,
     FindingSeverity,
 )
+from app.services.redaction import redact_sensitive_text
 from app.services.repository import RepositorySnapshot
 
 EventEmitter = Callable[
@@ -531,7 +532,23 @@ class RepositoryAnalysisExecutor:
                 )
                 if key not in seen:
                     seen.add(key)
-                    findings.append(finding)
+                    findings.append(
+                        {
+                            **finding,
+                            "title": redact_sensitive_text(
+                                str(finding.get("title") or "")
+                            ),
+                            "evidence": redact_sensitive_text(
+                                str(finding.get("evidence") or "")
+                            ),
+                            "impact": redact_sensitive_text(
+                                str(finding.get("impact") or "")
+                            ),
+                            "recommendation": redact_sensitive_text(
+                                str(finding.get("recommendation") or "")
+                            ),
+                        }
+                    )
         return findings
 
     async def _emit(

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.agents.specialists import _source_priority
 from app.domain.models import FindingCategory
+from app.services.redaction import redact_sensitive_text
 from app.services.repository import RepositorySnapshot
 from app.services.static_analysis import run_static_analysis
 
@@ -40,3 +41,13 @@ def test_source_priority_prefers_application_code() -> None:
     assert _source_priority("scripts/tool.py") == 1
     assert _source_priority("pom.xml") == 2
     assert _source_priority("src/test/java/AppTest.java") == 3
+
+
+def test_redaction_handles_prefixed_database_password_names() -> None:
+    content = "DB_PWD='root-secret'; ADMIN_TOKEN='token-value'; SECRET_KEY='key-value';"
+    redacted = redact_sensitive_text(content)
+
+    assert "root-secret" not in redacted
+    assert "token-value" not in redacted
+    assert "key-value" not in redacted
+    assert redacted.count("<REDACTED>") == 3

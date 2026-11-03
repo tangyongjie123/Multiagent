@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { AGENT_ORDER, AGENT_SHORT_LABELS } from "./agentMeta";
+import { ANALYSIS_AGENT_ORDER, AGENT_SHORT_LABELS } from "./agentMeta";
 import { api } from "./api";
 import { ExecutionDetails } from "./ExecutionDetails";
 import type {
   Analysis,
   AnalysisEvent,
   Artifact,
+  ChatCitation,
+  ChatEvent,
+  ChatMessage,
   Finding,
   FindingCategory,
   HealthResult,
@@ -30,6 +33,16 @@ const STREAM_EVENTS = [
   "analysis.failed",
   "analysis.cancelled",
   "analysis.interrupted",
+];
+const CHAT_STREAM_EVENTS = [
+  "chat.turn.queued",
+  "chat.turn.started",
+  "chat.main.decision",
+  "chat.agent.started",
+  "chat.agent.completed",
+  "chat.agent.failed",
+  "chat.completed",
+  "chat.failed",
 ];
 const SEVERITIES: Severity[] = ["critical", "major", "minor", "info"];
 const SEVERITY_LABELS: Record<Severity, string> = {
@@ -92,9 +105,9 @@ export default function App() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [report, setReport] = useState("");
-  const [activeTab, setActiveTab] = useState<"findings" | "timeline" | "report">(
-    "findings",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "findings" | "timeline" | "chat" | "report"
+  >("findings");
   const [severityFilter, setSeverityFilter] = useState<Severity | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<FindingCategory | "all">(
     "all",
@@ -105,6 +118,15 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [clock, setClock] = useState(Date.now());
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
+  const [chatSessionId, setChatSessionId] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatEvents, setChatEvents] = useState<ChatEvent[]>([]);
+  const [chatCitations, setChatCitations] = useState<
+    Record<string, ChatCitation[]>
+  >({});
+  const [chatInput, setChatInput] = useState("");
+  const [chatRunning, setChatRunning] = useState(false);
+  const [chatEventCursor, setChatEventCursor] = useState(0);
 
   const selectedRepository = useMemo(
     () => repositories.find((item) => item.id === selectedRepositoryId) ?? null,
@@ -177,6 +199,7 @@ export default function App() {
   const streamEnabled =
     analysis?.id === selectedAnalysisId &&
     ["pending", "cloning", "analyzing"].includes(analysis.status);
+  const latestChatEvent = chatEvents[chatEvents.length - 1];
 
   async function loadAnalysis(analysisId: string): Promise<Analysis> {
     // 完成、失败或取消后加载最新问题与产物快照。
@@ -203,6 +226,13 @@ export default function App() {
     setReport("");
     setSeverityFilter("all");
     setCategoryFilter("all");
+    setChatSessionId("");
+    setChatMessages([]);
+    setChatEvents([]);
+    setChatCitations({});
+    setChatInput("");
+    setChatRunning(false);
+    setChatEventCursor(0);
     setEvents(await api.events(analysisId));
     await loadAnalysis(analysisId);
   }
@@ -214,6 +244,13 @@ export default function App() {
     setFindings([]);
     setArtifacts([]);
     setReport("");
+    setChatSessionId("");
+    setChatMessages([]);
+    setChatEvents([]);
+    setChatCitations({});
+    setChatInput("");
+    setChatRunning(false);
+    setChatEventCursor(0);
     const history = await api.analyses(repositoryId);
     setAnalyses(history);
     if (history[0]) {
@@ -269,6 +306,50 @@ export default function App() {
     };
   }, [selectedAnalysisId, streamEnabled]);
 
+  useEffect(() => {
+    if (!chatSessionId || !chatRunning) return;
+    const stream = new EventSource(
+      api.chatEventStreamUrl(chatSessionId, chatEventCursor),
+    );
+    const refresh = async () => {
+      const messages = await api.chatMessages(chatSessionId);
+      setChatMessages(messages);
+      const completed = messages.filter(
+        (message) =>
+          message.role === "assistant" && message.status === "completed",
+      );
+      const entries = await Promise.all(
+        completed.map(async (message) => [
+          message.id,
+          await api.chatCitations(message.id),
+        ] as const),
+      );
+      setChatCitations(Object.fromEntries(entries));
+    };
+    const onEvent = (message: MessageEvent<string>) => {
+      const event = JSON.parse(message.data) as ChatEvent;
+      setChatEvents((current) =>
+        current.some((item) => item.id === event.id)
+          ? current
+          : [...current, event].sort((a, b) => a.sequence - b.sequence),
+      );
+      void refresh();
+      if (["chat.completed", "chat.failed"].includes(event.event_type)) {
+        setChatRunning(false);
+        stream.close();
+      }
+    };
+    for (const eventName of CHAT_STREAM_EVENTS) {
+      stream.addEventListener(eventName, onEvent as EventListener);
+    }
+    return () => {
+      for (const eventName of CHAT_STREAM_EVENTS) {
+        stream.removeEventListener(eventName, onEvent as EventListener);
+      }
+      stream.close();
+    };
+  }, [chatSessionId, chatEventCursor, chatRunning]);
+
   async function submitRepository(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -322,6 +403,44 @@ export default function App() {
       setError(String(requestError));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendChatMessage(event: React.FormEvent) {
+    event.preventDefault();
+    const content = chatInput.trim();
+    if (!content || !selectedRepository || !analysis) return;
+    if (analysis.status !== "completed") {
+      setError("请先完成一次仓库分析，再向 AI 提问。");
+      return;
+    }
+    setChatRunning(true);
+    setChatEventCursor(
+      chatEvents.length > 0 ? chatEvents[chatEvents.length - 1].sequence : 0,
+    );
+    setError("");
+    try {
+      let sessionId = chatSessionId;
+      if (!sessionId) {
+        const chatSession = await api.createChatSession(
+          selectedRepository.id,
+          analysis.id,
+          `${selectedRepository.name} 审查对话`,
+        );
+        sessionId = chatSession.id;
+        setChatSessionId(sessionId);
+        setChatEvents([]);
+      }
+      const turn = await api.sendChatMessage(sessionId, content);
+      setChatMessages((current) => [
+        ...current,
+        turn.user_message,
+        turn.assistant_message,
+      ]);
+      setChatInput("");
+    } catch (requestError) {
+      setChatRunning(false);
+      setError(String(requestError));
     }
   }
 
@@ -505,7 +624,7 @@ export default function App() {
 
               <section className="agent-track">
                 {/* 主 Agent 与六个专业 Agent 的完成进度。 */}
-                {AGENT_ORDER.map((agent, index) => {
+                {ANALYSIS_AGENT_ORDER.map((agent, index) => {
                   const complete =
                     (agent === "main" && analysis?.status === "completed") ||
                     events.some(
@@ -625,6 +744,12 @@ export default function App() {
                   onClick={() => setActiveTab("timeline")}
                 >
                   Timeline <b>{events.length}</b>
+                </button>
+                <button
+                  className={activeTab === "chat" ? "active" : ""}
+                  onClick={() => setActiveTab("chat")}
+                >
+                  Ask AI
                 </button>
                 <button
                   className={activeTab === "report" ? "active" : ""}
@@ -786,6 +911,109 @@ export default function App() {
                         </article>
                       ))}
                     </div>
+                  )}
+                </section>
+              )}
+
+              {activeTab === "chat" && (
+                <section className="tab-panel chat-panel">
+                  <div className="chat-heading">
+                    <div>
+                      <span>EVIDENCE-BASED CHAT</span>
+                      <h2>向当前分析提问</h2>
+                    </div>
+                    <p>
+                      回答只使用当前仓库的分析结果和 Finding，不执行目标仓库代码。
+                    </p>
+                  </div>
+
+                  {analysis?.status !== "completed" ? (
+                    <div className="empty-state">
+                      请先完成一次仓库分析，再向 AI 提问。
+                    </div>
+                  ) : (
+                    <>
+                      <div className="chat-messages">
+                        {chatMessages.length === 0 && (
+                          <div className="chat-suggestions">
+                            {[
+                              "总结这个项目最严重的问题",
+                              "解释第一条安全问题的证据",
+                              "按优先级生成修复计划",
+                            ].map((suggestion) => (
+                              <button
+                                key={suggestion}
+                                onClick={() => setChatInput(suggestion)}
+                                type="button"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {chatMessages.map((message) => (
+                          <article
+                            className={`chat-message ${message.role} ${message.status}`}
+                            key={message.id}
+                          >
+                            <div className="chat-message-meta">
+                              <strong>
+                                {message.role === "user" ? "你" : "RepoGraph AI"}
+                              </strong>
+                              <span>{formatDate(message.created_at)}</span>
+                            </div>
+                            <div className="chat-message-content">
+                              {message.status === "generating"
+                                ? "正在检索证据并生成回答…"
+                                : message.content}
+                            </div>
+                            {message.role === "assistant" &&
+                              chatCitations[message.id]?.length > 0 && (
+                                <div className="chat-citations">
+                                  <strong>引用证据</strong>
+                                  {chatCitations[message.id].map((citation) => (
+                                    <div key={citation.id}>
+                                      <code>
+                                        {citation.file_path ?? "项目级"}
+                                        {citation.line ? `:${citation.line}` : ""}
+                                      </code>
+                                      <p>{citation.excerpt}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                          </article>
+                        ))}
+                      </div>
+
+                      {chatRunning && latestChatEvent && (
+                        <div className="chat-progress">
+                          <i />
+                          <strong>
+                            {AGENT_SHORT_LABELS[latestChatEvent.agent] ??
+                              latestChatEvent.agent}
+                          </strong>
+                          <span>{latestChatEvent.message}</span>
+                        </div>
+                      )}
+
+                      <form className="chat-form" onSubmit={sendChatMessage}>
+                        <textarea
+                          disabled={chatRunning}
+                          onChange={(event) => setChatInput(event.target.value)}
+                          placeholder="例如：这个项目最严重的三个问题是什么？"
+                          rows={3}
+                          value={chatInput}
+                        />
+                        <button
+                          className="solid-button"
+                          disabled={chatRunning || !chatInput.trim()}
+                          type="submit"
+                        >
+                          {chatRunning ? "分析中..." : "发送问题"}
+                        </button>
+                      </form>
+                    </>
                   )}
                 </section>
               )}

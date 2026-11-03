@@ -1,6 +1,6 @@
 # RepoGraph
 
-RepoGraph 是一个面向 Git 仓库的多 Agent 静态代码审查平台。用户提交公开仓库地址后，主 Agent 通过 LangGraph 依次调度 Repository、Architecture、Test、Security、Quality 和 Report 六个专业 Agent，输出带文件位置、证据、影响和修复建议的中文审查报告。
+RepoGraph 是一个面向 Git 仓库的多 Agent 静态代码审查与证据问答平台。用户提交公开仓库地址后，主 Agent 通过 LangGraph 依次调度 Repository、Architecture、Test、Security、Quality 和 Report 六个专业 Agent，输出带文件位置、证据、影响和修复建议的中文审查报告。分析完成后，用户还可以通过“Ask AI”继续追问项目风险、解释 Finding 或生成修复计划。
 
 项目只读取被审查仓库，不执行其中的代码、脚本、测试或构建命令，也不会修改或推送目标仓库。
 
@@ -19,6 +19,17 @@ Git URL
 ```
 
 专业 Agent 通过 MCP Streamable HTTP 读取仓库目录、文件和搜索证据。每次 Agent 路由、MCP 工具调用、失败、完成和取消状态都会写入事件表，并通过 SSE 实时推送到前端。
+
+聊天使用独立但同构的主 Agent 流程：
+
+```text
+用户问题
+  -> Main Agent
+  -> Intent Agent
+  -> Conversation Agent
+  -> Evidence Verifier Agent
+  -> 中文回答 + Finding 引用
+```
 
 ## 已实现能力
 
@@ -40,7 +51,11 @@ Git URL
 - 生成自包含 HTML 图文报告，内嵌严重级别和分类 SVG 图表；Markdown 报告也包含内嵌图片。
 - 分析完成后可从页面顶部或报告页下载带仓库名和 Commit 前缀的 Markdown 报告。
 - 提供 FastAPI OpenAPI 文档和基础健康检查。
-- 已加入聊天会话和用户消息的 PostgreSQL 持久化 API，AI 回复与聊天界面尚未接入。
+- 提供“Ask AI”聊天页，可在已完成的仓库分析上追问、解释问题并生成修复计划。
+- 聊天由主 Agent 调度 Intent、Conversation 和 Evidence Verifier 三个专业 Agent，回答只引用已有 Finding。
+- 聊天过程通过独立 SSE 事件流展示，并按事件序号增量续传。
+- 聊天会话、消息、模型用量、Finding 引用和执行事件均持久化到 PostgreSQL。
+- 在 MCP、分析问题、聊天证据、回答和引用摘要之间复用统一敏感信息脱敏逻辑。
 
 ## 技术栈
 
@@ -61,6 +76,9 @@ Git URL
 - `static_analysis.py`：确定性安全与质量规则。
 - `analysis_events.py`：Agent 和工具事件持久化。
 - `report_visuals.py`：严重级别图、分类图、Markdown 和 HTML 报告。
+- `chat_runner.py`：加载分析证据、执行聊天图并保存回答与引用。
+- `chat_events.py`：聊天事件序号和持久化。
+- `redaction.py`：统一处理凭证赋值、URL 密码和私钥脱敏。
 
 调用链为：
 

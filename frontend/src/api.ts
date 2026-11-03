@@ -2,6 +2,11 @@ import type {
   Analysis,
   AnalysisEvent,
   Artifact,
+  ChatCitation,
+  ChatEvent,
+  ChatMessage,
+  ChatSession,
+  ChatTurn,
   Finding,
   HealthResult,
   Repository,
@@ -75,4 +80,30 @@ export const api = {
     `${API_BASE}/api/v1/analyses/${analysisId}/report/html`,
   reportHtmlDownloadUrl: (analysisId: string) =>
     `${API_BASE}/api/v1/analyses/${analysisId}/report/html/download`,
+  createChatSession: (
+    repositoryId: string,
+    analysisId: string | null,
+    title?: string,
+  ) =>
+    request<ChatSession>("/api/v1/chat/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        repository_id: repositoryId,
+        analysis_id: analysisId,
+        title,
+      }),
+    }),
+  chatMessages: (sessionId: string) =>
+    request<ChatMessage[]>(`/api/v1/chat/sessions/${sessionId}/messages`),
+  sendChatMessage: (sessionId: string, content: string) =>
+    request<ChatTurn>(`/api/v1/chat/sessions/${sessionId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+  chatCitations: (messageId: string) =>
+    request<ChatCitation[]>(`/api/v1/chat/messages/${messageId}/citations`),
+  chatEvents: (sessionId: string) =>
+    request<ChatEvent[]>(`/api/v1/chat/sessions/${sessionId}/events`),
+  chatEventStreamUrl: (sessionId: string, afterSequence = 0) =>
+    `${API_BASE}/api/v1/chat/sessions/${sessionId}/events/stream?after_sequence=${afterSequence}`,
 };

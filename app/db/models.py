@@ -184,3 +184,48 @@ class ChatMessageRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class ChatCitationRecord(Base):
+    """助手回答引用的 Finding 或代码位置。"""
+
+    __tablename__ = "chat_citations"
+    __table_args__ = (
+        Index("ix_chat_citations_message", "message_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    message_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="CASCADE"), index=True
+    )
+    finding_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("analysis_findings.id", ondelete="SET NULL"), index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(30))
+    file_path: Mapped[str | None] = mapped_column(Text)
+    line: Mapped[int | None] = mapped_column(Integer)
+    excerpt: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ChatEventRecord(Base):
+    """可回放、可通过 SSE 推送的聊天执行事件。"""
+
+    __tablename__ = "chat_events"
+    __table_args__ = (
+        UniqueConstraint("session_id", "sequence", name="uq_chat_events_sequence"),
+        Index("ix_chat_events_session_created", "session_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer)
+    event_type: Mapped[str] = mapped_column(String(80))
+    agent: Mapped[str] = mapped_column(String(40))
+    message: Mapped[str] = mapped_column(Text)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

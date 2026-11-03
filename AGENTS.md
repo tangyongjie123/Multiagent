@@ -16,11 +16,12 @@
 - 从架构、测试、安全、质量四个方向生成有证据的结构化问题。
 - 使用主 Agent 汇总各子 Agent 结果并生成中文审查报告。
 - 前端实时展示克隆、扫描、各 Agent 分析状态、问题清单和最终报告。
+- 分析完成后提供基于 Finding 证据的 AI 聊天，并展示三个聊天专业 Agent 的执行过程。
 
 ## 分层职责
 
 - `app/api/` 只处理 HTTP 请求、响应码和输入输出 Schema。
-- `app/agents/` 负责主 Agent 路由、专业 Agent 判断和结构化输出。
+- `app/agents/` 负责分析/聊天主 Agent 路由、专业 Agent 判断和结构化输出。
 - `app/services/` 负责业务编排及副作用，包括克隆、扫描、事件、持久化和报告生成。
 - `app/db/` 只提供数据库模型和会话，不包含 Agent 决策。
 - `app/mcp/` 只提供受控只读工具，不直接决定分析任务何时结束。
@@ -97,7 +98,7 @@ Git URL
 
 ## 持久化
 
-- PostgreSQL：仓库、分析运行、事件、问题和报告元数据。
+- PostgreSQL：仓库、分析运行、事件、问题、报告元数据、聊天会话、消息、Finding 引用和聊天事件。
 - LangGraph checkpoint：分析状态。
 - Milvus：代码块和知识片段向量。
 - Neo4j：仓库、文件、类、方法和依赖关系。
@@ -107,6 +108,7 @@ Git URL
 
 - React 控制台用于提交仓库、查看分析历史和实时进度。
 - 使用 SSE 接收 Agent 事件，不使用高频轮询。
+- “Ask AI”只在分析完成后开放，展示助手状态、回答和 Finding 引用。
 - 时间线必须显示 MCP 工具调用、耗时和失败状态。
 - 问题必须显示严重级别、分类、文件位置、证据、影响和修复建议。
 - 报告支持在线查看和 Markdown 下载。
@@ -114,10 +116,13 @@ Git URL
 
 ## 聊天扩展
 
-- 当前已完成聊天会话和用户消息的数据库与 REST 持久化基础。
-- 当前阶段不得生成或伪造助手回复，前端聊天页面应在 Agent 链路完成后接入。
-- 后续助手消息必须由主 Agent 调度 Intent、Conversation 和 Evidence Verifier Agent。
+- 证据聊天 MVP 已接入主 Agent、Intent Agent、Conversation Agent 和 Evidence Verifier Agent。
+- 聊天主 Agent 仍是确定性 LangGraph 路由；Intent 和 Conversation 可以调用聊天模型，Evidence Verifier 不调用模型。
+- 聊天消息通过后台任务生成，状态和 Agent 事件写入 PostgreSQL，并通过 SSE 增量展示。
+- 同一会话在助手生成期间不得接受并发提问。
 - 聊天回答必须引用已有 Finding、文件证据或明确说明证据不足。
+- 聊天当前只基于已完成分析和已有 Finding，不直接读取完整仓库，也不使用 Milvus 按需索引。
+- 聊天模型输入、回答、Finding 引用摘要和失败信息必须统一脱敏。
 
 ## 语言约定
 

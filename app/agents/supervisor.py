@@ -18,6 +18,11 @@ SPECIALIST_SEQUENCE = (
     AgentRole.QUALITY,
     AgentRole.REPORT,
 )
+CHAT_SPECIALIST_SEQUENCE = (
+    AgentRole.INTENT,
+    AgentRole.CONVERSATION,
+    AgentRole.EVIDENCE_VERIFIER,
+)
 
 
 class AnalysisState(TypedDict, total=False):
@@ -27,6 +32,31 @@ class AnalysisState(TypedDict, total=False):
     repository_url: str
     branch: str | None
     repo_path: str
+    current_agent: str | None
+    next_action: str
+    completed_agents: list[str]
+    results: list[dict[str, Any]]
+    decisions: list[dict[str, Any]]
+    input_tokens: int
+    output_tokens: int
+    token_budget: int
+    failed: bool
+    error: str | None
+
+
+class ChatState(TypedDict, total=False):
+    """主 Agent 编排聊天专业 Agent 时使用的状态。"""
+
+    session_id: str
+    user_content: str
+    repository_name: str
+    analysis_summary: str | None
+    history: list[dict[str, str]]
+    evidence: list[dict[str, Any]]
+    intent: str | None
+    conversation: dict[str, Any] | None
+    verified_answer: str | None
+    citations: list[dict[str, Any]]
     current_agent: str | None
     next_action: str
     completed_agents: list[str]
@@ -51,6 +81,22 @@ class SpecialistExecutor(Protocol):
 
 Executor = SpecialistExecutor | Callable[
     [AgentRole, AnalysisState],
+    Awaitable[AgentResult],
+]
+
+
+class ChatSpecialistExecutor(Protocol):
+    """聊天专业 Agent 执行器。"""
+
+    async def __call__(
+        self,
+        role: AgentRole,
+        state: ChatState,
+    ) -> AgentResult: ...
+
+
+ChatExecutor = ChatSpecialistExecutor | Callable[
+    [AgentRole, ChatState],
     Awaitable[AgentResult],
 ]
 
@@ -165,6 +211,115 @@ def build_analysis_graph(executor: Executor, checkpointer: Any = None) -> Any:
         _route_main_agent,
         {
             **{role.value: role.value for role in SPECIALIST_SEQUENCE},
+            END: END,
+        },
+    )
+    return graph.compile(checkpointer=checkpointer)
+
+
+def _next_chat_role(state: ChatState) -> AgentRole | None:
+    completed = set(state.get("completed_agents", []))
+    for role in CHAT_SPECIALIST_SEQUENCE:
+        if role.value not in completed:
+            return role
+    return None
+
+
+def _chat_main_agent_node(state: ChatState) -> ChatState:
+    """聊天场景的主 Agent 确定性路由。"""
+
+    if state.get("failed"):
+        action = "fail"
+        reason = state.get("error") or "聊天专业 Agent 执行失败"
+    else:
+        next_role = _next_chat_role(state)
+        action = next_role.value if next_role is not None else "finish"
+        reason = (
+            "选择下一个未完成的聊天 Agent"
+            if next_role is not None
+            else "所有聊天 Agent 已完成"
+        )
+    decision = {
+        "sequence": len(state.get("decisions", [])) + 1,
+        "agent": AgentRole.MAIN.value,
+        "action": action,
+        "reason": reason,
+    }
+    return {
+        **state,
+        "current_agent": AgentRole.MAIN.value,
+        "next_action": action,
+        "decisions": [*state.get("decisions", []), decision],
+    }
+
+
+def _route_chat_main_agent(state: ChatState) -> str:
+    action = state.get("next_action", "fail")
+    return END if action in {"finish", "fail"} else action
+
+
+def build_chat_graph(executor: ChatExecutor, checkpointer: Any = None) -> Any:
+    """构建聊天场景的主 Agent 与三个专业 Agent。"""
+
+    graph = StateGraph(ChatState)
+    graph.add_node("main_agent", _chat_main_agent_node)
+
+    for role in CHAT_SPECIALIST_SEQUENCE:
+
+        async def run_chat_specialist(
+            state: ChatState,
+            specialist_role: AgentRole = role,
+        ) -> ChatState:
+            result = await executor(specialist_role, state)
+            usage = result.artifacts.get("usage", {})
+            input_tokens = int(state.get("input_tokens", 0))
+            output_tokens = int(state.get("output_tokens", 0))
+            if isinstance(usage, dict):
+                input_tokens += int(usage.get("input_tokens") or 0)
+                output_tokens += int(usage.get("output_tokens") or 0)
+            completed = list(state.get("completed_agents", []))
+            if result.success:
+                completed.append(specialist_role.value)
+            updated: ChatState = {
+                **state,
+                "current_agent": specialist_role.value,
+                "completed_agents": completed,
+                "results": [
+                    *state.get("results", []),
+                    result.model_dump(mode="json"),
+                ],
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+            payload = result.artifacts.get("payload")
+            if result.success and isinstance(payload, dict):
+                if specialist_role is AgentRole.INTENT:
+                    updated["intent"] = str(payload.get("intent") or "")
+                elif specialist_role is AgentRole.CONVERSATION:
+                    updated["conversation"] = payload
+                elif specialist_role is AgentRole.EVIDENCE_VERIFIER:
+                    updated["verified_answer"] = str(payload.get("answer") or "")
+                    citations = payload.get("citations")
+                    updated["citations"] = citations if isinstance(citations, list) else []
+            if not result.success:
+                updated["failed"] = True
+                updated["error"] = result.summary
+            elif input_tokens + output_tokens > int(
+                state.get("token_budget", 60_000)
+            ):
+                updated["failed"] = True
+                updated["error"] = "聊天 Token 预算已超限"
+            return updated
+
+        graph.add_node(role.value, run_chat_specialist)
+        graph.add_edge(role.value, "main_agent")
+
+    graph.add_edge(START, "main_agent")
+    graph.add_conditional_edges(
+        "main_agent",
+        _route_chat_main_agent,
+        {
+            **{role.value: role.value for role in CHAT_SPECIALIST_SEQUENCE},
             END: END,
         },
     )

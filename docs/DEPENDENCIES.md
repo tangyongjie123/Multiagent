@@ -96,19 +96,18 @@ npm run build
 - Milvus 与 Neo4j：可选，运行在用户维护的虚拟机或 Docker 环境中。
 - MCP 工具服务：随 FastAPI 进程启动，默认地址为 `http://127.0.0.1:8000/mcp/`。
 
-## 7. 后续聊天 Agent 扩展
+## 7. 聊天 Agent 依赖
 
-当前依赖已经覆盖聊天和多 Agent 扩展所需能力：
+当前依赖已经覆盖已实现的证据聊天：
 
-- FastAPI 与 SSE：聊天 REST API 和流式回答。
-- LangGraph：主 Agent 模式路由和多 Agent 状态。
-- LangChain Core/OpenAI：消息、工具调用、结构化输出和聊天模型。
+- FastAPI 与 SSE：聊天 REST API、后台任务和增量事件流。
+- LangGraph：聊天主 Agent 路由、三个专业 Agent 和 checkpoint。
+- LangChain Core/OpenAI：聊天消息、结构化输出和模型调用。
 - MCP：受控证据工具。
-- PostgreSQL：会话、消息、引用和分析状态。
-- Milvus：代码块和历史问题向量检索。
-- Neo4j：文件、类、方法和依赖关系查询。
+- PostgreSQL：会话、消息、Finding 引用、聊天事件和分析状态。
+- React + TypeScript：Ask AI 页面、引用卡片和执行状态。
 
-因此聊天版 MVP 不需要提前加入未使用的聊天 UI 或额外向量数据库 SDK；只有实际接入新能力时才增加对应依赖。
+Milvus 与 Neo4j 仍是后续按需代码检索和关系图谱依赖，没有为当前证据聊天新增额外包。
 
 ## 8. 验证
 

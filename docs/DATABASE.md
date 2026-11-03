@@ -25,7 +25,9 @@ Milvus 不保存事务型业务数据。报告正文、问题 JSON 和仓库快�
 | `analysis_findings` | 保存可定位、可分类和可排序的审查问题 | 完整源码、模型隐藏推理 | 多对一关联分析 |
 | `analysis_artifacts` | 保存报告、图表和中间文件的元数据、路径与哈希 | 文件正文 | 多对一关联分析；正文位于工作区 |
 | `chat_sessions` | 保存聊天会话及其仓库/分析关联 | 具体消息内容 | 关联仓库和可选分析；一对多关联消息 |
-| `chat_messages` | 保存用户和未来助手消息、模型和 Token 用量 | 引用证据和 Agent 事件 | 多对一关联聊天会话 |
+| `chat_messages` | 保存用户和助手消息、状态、模型和 Token 用量 | 引用证据和 Agent 事件 | 多对一关联聊天会话；被引用表关联 |
+| `chat_citations` | 保存助手回答引用的 Finding、文件位置和证据摘要 | 完整源码和模型隐藏推理 | 多对一关联助手消息；可关联 Finding |
+| `chat_events` | 保存可回放的聊天主 Agent、专业 Agent 和失败事件 | 当前聊天状态和消息正文 | 多对一关联聊天会话 |
 | `checkpoints` | 保存 LangGraph 线程的 checkpoint 主记录 | 业务问题和报告 | 被 writes/blobs 引用 |
 | `checkpoint_writes` | 保存图节点执行产生的待处理写入 | 最终业务数据 | 关联 `checkpoints` |
 | `checkpoint_blobs` | 保存序列化后的 channel 大对象 | 对外 API 响应 | 关联 checkpoint 线程和 channel |
@@ -150,20 +152,49 @@ Windows 默认 Proactor 事件循环不兼容当前 psycopg 异步模式，因�
 
 ### `chat_messages`
 
-负责保存会话中的用户消息和未来的助手消息。引用证据、文件位置和 Finding 关联将在后续 `chat_citations` 表中保存，当前阶段尚未创建该表。
+负责保存会话中的用户消息和助手消息。消息先创建为 `recorded` 或 `generating`，后台聊天图完成后更新为 `completed`，异常时更新为 `failed`。引用证据写入 `chat_citations`，执行过程写入 `chat_events`。
 
 | 字段 | 说明 |
 | --- | --- |
 | `id` | UUID 主键 |
 | `session_id` | 所属聊天会话 |
-| `role` | `user` 或未来的 `assistant` |
+| `role` | `user` 或 `assistant` |
 | `content` | 消息正文 |
 | `status` | `recorded`、`generating`、`completed` 或 `failed` |
 | `model_name` | 生成助手消息时使用的模型 |
 | `input_tokens` / `output_tokens` | 单条模型响应用量 |
 | `created_at` | 创建时间 |
 
-当前阶段只实现用户消息持久化。`assistant` 生成、引用表和 SSE 聊天事件将在下一阶段接入主 Agent 后启用。
+### `chat_citations`
+
+负责证明助手回答使用了哪些已有分析证据。`excerpt` 只保存脱敏后的标题和证据摘要，不保存完整文件；Finding 被删除时 `finding_id` 置空，引用记录本身保留用于审计。
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | UUID 主键 |
+| `message_id` | 所属助手消息；消息删除时级联删除 |
+| `finding_id` | 可选关联 `analysis_findings`；Finding 删除时置空 |
+| `source_type` | 当前为 `finding` |
+| `file_path` / `line` | 可选证据位置 |
+| `excerpt` | 脱敏后的证据摘要，最多 2,000 字符 |
+| `created_at` | 创建时间 |
+
+### `chat_events`
+
+负责保存聊天执行时间线，供 REST 回放和 SSE 推送。事件只在单个会话内递增，`session_id + sequence` 唯一。
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 自增主键 |
+| `session_id` | 所属聊天会话 |
+| `sequence` | 会话内单调递增序号 |
+| `event_type` | 例如 `chat.main.decision`、`chat.completed` |
+| `agent` | 聊天主 Agent 或专业 Agent |
+| `message` | 中文可读信息 |
+| `data` | JSONB 扩展信息，例如 Token 用量和消息 ID |
+| `created_at` | 事件时间 |
+
+聊天状态以 `chat_messages.status` 为准，事件表用于回放和可观测性，不能替代消息状态。
 
 ## 5. LangGraph checkpoint
 
@@ -176,7 +207,7 @@ checkpoint_writes
 checkpoints
 ```
 
-线程 ID 格式为 `analysis:{analysis_id}`，便于将一次运行与 checkpoint 关联。
+分析线程 ID 格式为 `analysis:{analysis_id}`，聊天轮次格式为 `chat:{session_id}:{assistant_message_id}`，避免不同对话或重试覆盖状态。
 
 各 checkpoint 表职责：
 

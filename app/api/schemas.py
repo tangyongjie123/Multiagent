@@ -180,6 +180,43 @@ class ChatMessageResponse(BaseModel):
     created_at: datetime
 
 
+class ChatCitationResponse(BaseModel):
+    """助手消息引用的一条证据。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    message_id: UUID
+    finding_id: UUID | None
+    source_type: str
+    file_path: str | None
+    line: int | None
+    excerpt: str
+    created_at: datetime
+
+
+class ChatEventResponse(BaseModel):
+    """聊天 Agent 和工具执行事件。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: UUID
+    sequence: int
+    event_type: str
+    agent: str
+    message: str
+    data: dict[str, Any]
+    created_at: datetime
+
+
+class ChatTurnResponse(BaseModel):
+    """一次聊天请求已创建的用户消息和助手占位消息。"""
+
+    user_message: ChatMessageResponse
+    assistant_message: ChatMessageResponse
+
+
 class HealthComponent(BaseModel):
     """单个依赖服务状态。"""
 

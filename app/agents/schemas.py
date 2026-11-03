@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.models import Finding
+from app.domain.models import ChatIntent, Finding
 
 
 class StrictModel(BaseModel):
@@ -36,3 +38,19 @@ class AnalysisReport(StrictModel):
 
     summary: str
     markdown: str
+
+
+class ChatIntentResult(StrictModel):
+    """Intent Agent 的结构化输出。"""
+
+    intent: ChatIntent
+    reason: str
+    target_finding_id: UUID | None = None
+
+
+class ConversationAnswer(StrictModel):
+    """Conversation Agent 的结构化输出。"""
+
+    answer: str
+    cited_finding_ids: list[UUID] = Field(default_factory=list)
+    insufficient_evidence: bool = False
