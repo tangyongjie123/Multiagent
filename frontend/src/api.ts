@@ -67,6 +67,6 @@ export const api = {
   },
   eventStreamUrl: (analysisId: string) =>
     `${API_BASE}/api/v1/analyses/${analysisId}/events/stream`,
-  reportUrl: (analysisId: string) =>
-    `${API_BASE}/api/v1/analyses/${analysisId}/report`,
+  reportDownloadUrl: (analysisId: string) =>
+    `${API_BASE}/api/v1/analyses/${analysisId}/report/download`,
 };

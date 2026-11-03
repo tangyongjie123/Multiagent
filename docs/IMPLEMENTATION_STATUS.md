@@ -36,7 +36,7 @@
 | --- | --- |
 | Ruff | 通过 |
 | mypy | 通过 |
-| pytest | 通过（13 项） |
+| pytest | 通过（14 项） |
 | 前端 TypeScript + Vite 构建 | 通过 |
 | 旧代码生成路由移除 | 已完成 |
 | 新 GitHub 分支工作区 | 已完成 |

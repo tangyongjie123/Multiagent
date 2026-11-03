@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -21,13 +22,21 @@ from app.api.schemas import (
     EventResponse,
     FindingResponse,
 )
-from app.db.models import AnalysisArtifactRecord, AnalysisEventRecord, AnalysisRecord, FindingRecord
+from app.db.models import (
+    AnalysisArtifactRecord,
+    AnalysisEventRecord,
+    AnalysisRecord,
+    FindingRecord,
+    RepositoryRecord,
+)
 from app.db.session import get_session, get_session_factory
 from app.domain.models import AnalysisStatus
 from app.services.analysis_runner import cancel_analysis
+from app.services.repository import repository_workspace
 
 router = APIRouter(prefix="/api/v1/analyses", tags=["analyses"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 async def _require_analysis(session: AsyncSession, analysis_id: UUID) -> AnalysisRecord:
@@ -181,3 +190,55 @@ async def get_analysis_report(
         encoding="utf-8",
     )
     return PlainTextResponse(content)
+
+
+@router.get("/{analysis_id}/report/download")
+async def download_analysis_report(
+    analysis_id: UUID,
+    session: SessionDep,
+) -> FileResponse:
+    analysis = await _require_analysis(session, analysis_id)
+    if analysis.status != AnalysisStatus.COMPLETED.value:
+        raise HTTPException(status_code=409, detail="分析尚未完成")
+    artifact = await session.scalar(
+        select(AnalysisArtifactRecord).where(
+            AnalysisArtifactRecord.analysis_id == analysis_id,
+            AnalysisArtifactRecord.kind == "report",
+        )
+    )
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="报告不存在")
+
+    report_path = await asyncio.to_thread(
+        _resolve_report_path,
+        analysis_id,
+        artifact.storage_path,
+    )
+    if report_path is None:
+        raise HTTPException(status_code=404, detail="报告文件不存在")
+
+    repository = await session.get(RepositoryRecord, analysis.repository_id)
+    repository_slug = SAFE_FILENAME.sub(
+        "-",
+        repository.name if repository is not None else "repository",
+    ).strip(".-_") or "repository"
+    filename = f"{repository_slug}-{str(analysis_id)[:8]}-report.md"
+    return FileResponse(
+        path=report_path,
+        media_type="text/markdown",
+        filename=filename,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def _resolve_report_path(analysis_id: UUID, storage_path: str) -> Path | None:
+    """校验报告文件位于对应分析工作区内。"""
+
+    try:
+        workspace = repository_workspace(analysis_id).resolve(strict=True)
+        report_path = Path(storage_path).resolve(strict=True)
+    except OSError:
+        return None
+    if not report_path.is_relative_to(workspace) or not report_path.is_file():
+        return None
+    return report_path

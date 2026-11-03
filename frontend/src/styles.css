@@ -240,7 +240,8 @@ input:focus {
 
 .solid-button,
 .outline-button,
-.stop-button {
+.stop-button,
+.download-button {
   padding: 11px 14px;
   border: 1px solid #171a18;
   font-size: 11px;
@@ -264,6 +265,16 @@ input:focus {
 
 .outline-button:hover {
   background: #d8ff55;
+}
+
+.download-button {
+  color: #171a18;
+  background: #d8ff55;
+  font-weight: 800;
+}
+
+.download-button:hover {
+  background: #bfe63b;
 }
 
 .stop-button {
@@ -874,6 +885,11 @@ button:disabled {
 
   .repo-heading h1 {
     font-size: clamp(28px, 11vw, 48px);
+  }
+
+  .heading-actions {
+    width: 100%;
+    flex-wrap: wrap;
   }
 
   .status-grid {

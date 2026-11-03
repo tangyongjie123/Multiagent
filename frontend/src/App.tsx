@@ -270,15 +270,11 @@ export default function App() {
     }
   }
 
-  async function downloadReport() {
+  function downloadReport() {
     if (!analysis) return;
-    const content = await api.report(analysis.id);
-    const url = URL.createObjectURL(new Blob([content], { type: "text/markdown" }));
     const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${selectedRepository?.name ?? "repository"}-analysis.md`;
+    anchor.href = api.reportDownloadUrl(analysis.id);
     anchor.click();
-    URL.revokeObjectURL(url);
   }
 
   return (
@@ -384,6 +380,15 @@ export default function App() {
                   </a>
                 </div>
                 <div className="heading-actions">
+                  {analysis?.status === "completed" && (
+                    <button
+                      className="download-button"
+                      onClick={downloadReport}
+                      type="button"
+                    >
+                      下载报告
+                    </button>
+                  )}
                   <button className="outline-button" disabled={busy} onClick={startAnalysis}>
                     重新分析
                   </button>
@@ -564,8 +569,12 @@ export default function App() {
                   <div className="report-toolbar">
                     <span>{artifacts.length} artifacts</span>
                     {analysis?.status === "completed" && (
-                      <button className="outline-button" onClick={downloadReport}>
-                        下载 Markdown
+                      <button
+                        className="outline-button"
+                        onClick={downloadReport}
+                        type="button"
+                      >
+                        下载 Markdown 报告
                       </button>
                     )}
                   </div>
