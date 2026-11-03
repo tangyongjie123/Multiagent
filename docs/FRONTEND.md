@@ -40,6 +40,8 @@ python dev.py
 
 打开 `http://127.0.0.1:5173`。按 `Ctrl+C` 会同时停止 Vite 和 FastAPI。
 
+`dev.py` 会在控制台用中文依次显示 Python/Node 环境检查、FastAPI、MCP、React、健康检查和最终访问地址，并在退出时显示服务关闭过程。前端固定使用 5173 端口，端口被占用时会给出明确错误。
+
 单独启动：
 
 ```powershell
