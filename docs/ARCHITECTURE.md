@@ -225,3 +225,16 @@ React 不自行模拟进度，而是根据真实事件渲染 Agent 轨道、工�
 - 增加 Java 解析器并写入 Neo4j 图谱。
 - 使用后台任务队列替换 FastAPI 进程内任务，支持多 Worker。
 - 增加数据库迁移和对象存储，支持生产部署。
+
+## 12. 聊天扩展当前进度
+
+第一阶段已经加入聊天持久化基础：
+
+- `chat_sessions`：关联仓库和可选分析结果。
+- `chat_messages`：保存用户消息和未来的助手消息。
+- `POST /api/v1/chat/sessions`：创建会话。
+- `GET /api/v1/chat/sessions`：查询会话。
+- `GET /api/v1/chat/sessions/{id}/messages`：读取消息。
+- `POST /api/v1/chat/sessions/{id}/messages`：保存用户消息。
+
+当前接口不会生成助手回答，也不会调用模型。下一步由主 Agent 接入 Intent、Conversation 和 Evidence Verifier Agent 后，再添加聊天 SSE 和前端页面。

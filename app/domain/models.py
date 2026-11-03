@@ -32,6 +32,29 @@ class AnalysisStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class ChatSessionStatus(StrEnum):
+    """聊天会话状态。"""
+
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class ChatMessageRole(StrEnum):
+    """聊天消息来源。"""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+class ChatMessageStatus(StrEnum):
+    """聊天消息处理状态。"""
+
+    RECORDED = "recorded"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class FindingSeverity(StrEnum):
     """问题严重级别。"""
 

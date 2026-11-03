@@ -108,6 +108,33 @@ Windows 默认 Proactor 事件循环不兼容当前 psycopg 异步模式，因�
 | `sha256` | 文件内容哈希 |
 | `created_at` | 创建时间 |
 
+### `chat_sessions`
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | UUID 主键 |
+| `repository_id` | 关联仓库；仓库删除时级联删除会话 |
+| `analysis_id` | 可选关联某次分析；分析删除时置空 |
+| `title` | 会话标题 |
+| `status` | `active` 或 `archived` |
+| `created_at` / `updated_at` | 会话时间 |
+| `last_message_at` | 最近一条消息时间 |
+
+### `chat_messages`
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | UUID 主键 |
+| `session_id` | 所属聊天会话 |
+| `role` | `user` 或未来的 `assistant` |
+| `content` | 消息正文 |
+| `status` | `recorded`、`generating`、`completed` 或 `failed` |
+| `model_name` | 生成助手消息时使用的模型 |
+| `input_tokens` / `output_tokens` | 单条模型响应用量 |
+| `created_at` | 创建时间 |
+
+当前阶段只实现用户消息持久化。`assistant` 生成、引用表和 SSE 聊天事件将在下一阶段接入主 Agent 后启用。
+
 ## 4. LangGraph checkpoint
 
 `langgraph-checkpoint-postgres` 自动维护：

@@ -6,9 +6,16 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.models import AnalysisStatus, FindingCategory, FindingSeverity
+from app.domain.models import (
+    AnalysisStatus,
+    ChatMessageRole,
+    ChatMessageStatus,
+    ChatSessionStatus,
+    FindingCategory,
+    FindingSeverity,
+)
 
 
 class RepositoryCreate(BaseModel):
@@ -111,6 +118,65 @@ class ArtifactResponse(BaseModel):
     name: str
     content_type: str
     sha256: str
+    created_at: datetime
+
+
+class ChatSessionCreate(BaseModel):
+    """创建聊天会话。"""
+
+    repository_id: UUID
+    analysis_id: UUID | None = None
+    title: str | None = Field(default=None, max_length=255)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str | None) -> str | None:
+        normalized = value.strip() if value else None
+        return normalized or None
+
+
+class ChatSessionResponse(BaseModel):
+    """聊天会话元数据。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    repository_id: UUID
+    analysis_id: UUID | None
+    title: str
+    status: ChatSessionStatus
+    created_at: datetime
+    updated_at: datetime
+    last_message_at: datetime | None
+
+
+class ChatMessageCreate(BaseModel):
+    """用户发送的聊天消息。"""
+
+    content: str = Field(min_length=1, max_length=20_000)
+
+    @field_validator("content")
+    @classmethod
+    def normalize_content(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("消息内容不能为空")
+        return normalized
+
+
+class ChatMessageResponse(BaseModel):
+    """持久化的聊天消息。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    session_id: UUID
+    role: ChatMessageRole
+    content: str
+    status: ChatMessageStatus
+    model_name: str | None
+    input_tokens: int
+    output_tokens: int
     created_at: datetime
 
 

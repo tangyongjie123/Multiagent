@@ -112,6 +112,13 @@ Git URL
 - 报告支持在线查看和 Markdown 下载。
 - 默认中文界面。
 
+## 聊天扩展
+
+- 当前已完成聊天会话和用户消息的数据库与 REST 持久化基础。
+- 当前阶段不得生成或伪造助手回复，前端聊天页面应在 Agent 链路完成后接入。
+- 后续助手消息必须由主 Agent 调度 Intent、Conversation 和 Evidence Verifier Agent。
+- 聊天回答必须引用已有 Finding、文件证据或明确说明证据不足。
+
 ## 语言约定
 
 - 项目规则、Agent 提示词、需求、报告和前端文案默认中文。

@@ -40,6 +40,7 @@ Git URL
 - 生成自包含 HTML 图文报告，内嵌严重级别和分类 SVG 图表；Markdown 报告也包含内嵌图片。
 - 分析完成后可从页面顶部或报告页下载带仓库名和 Commit 前缀的 Markdown 报告。
 - 提供 FastAPI OpenAPI 文档和基础健康检查。
+- 已加入聊天会话和用户消息的 PostgreSQL 持久化 API，AI 回复与聊天界面尚未接入。
 
 ## 技术栈
 
