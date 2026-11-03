@@ -6,6 +6,7 @@ import type {
   AnalysisEvent,
   Artifact,
   Finding,
+  FindingCategory,
   HealthResult,
   Repository,
   Severity,
@@ -46,6 +47,24 @@ const STREAM_EVENTS = [
   "analysis.interrupted",
 ];
 const SEVERITIES: Severity[] = ["critical", "major", "minor", "info"];
+const SEVERITY_LABELS: Record<Severity, string> = {
+  critical: "严重",
+  major: "主要",
+  minor: "次要",
+  info: "提示",
+};
+const SEVERITY_COLORS: Record<Severity, string> = {
+  critical: "#c62424",
+  major: "#e17b2d",
+  minor: "#c6a52c",
+  info: "#7d978a",
+};
+const CATEGORIES: Array<{ key: FindingCategory; label: string; note: string }> = [
+  { key: "architecture", label: "架构", note: "分层、模块与依赖" },
+  { key: "test", label: "测试", note: "测试缺口与关联性" },
+  { key: "security", label: "安全", note: "凭证与危险调用" },
+  { key: "quality", label: "质量", note: "异常、日志与维护性" },
+];
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -91,6 +110,9 @@ export default function App() {
     "findings",
   );
   const [severityFilter, setSeverityFilter] = useState<Severity | "all">("all");
+  const [categoryFilter, setCategoryFilter] = useState<FindingCategory | "all">(
+    "all",
+  );
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("");
   const [error, setError] = useState("");
@@ -103,10 +125,12 @@ export default function App() {
   );
   const visibleFindings = useMemo(
     () =>
-      severityFilter === "all"
-        ? findings
-        : findings.filter((item) => item.severity === severityFilter),
-    [findings, severityFilter],
+      findings.filter(
+        (item) =>
+          (severityFilter === "all" || item.severity === severityFilter) &&
+          (categoryFilter === "all" || item.category === categoryFilter),
+      ),
+    [findings, severityFilter, categoryFilter],
   );
   const severityCounts = useMemo(
     () =>
@@ -118,6 +142,41 @@ export default function App() {
       ) as Record<Severity, number>,
     [findings],
   );
+  const categoryCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        CATEGORIES.map(({ key }) => [
+          key,
+          findings.filter((item) => item.category === key).length,
+        ]),
+      ) as Record<FindingCategory, number>,
+    [findings],
+  );
+  const groupedFindings = useMemo(
+    () =>
+      CATEGORIES.map(({ key, label, note }) => ({
+        key,
+        label,
+        note,
+        items: visibleFindings.filter((item) => item.category === key),
+      })).filter((group) => group.items.length > 0),
+    [visibleFindings],
+  );
+  const severityGradient = useMemo(() => {
+    if (findings.length === 0) {
+      return "conic-gradient(#d3d1c9 0 100%)";
+    }
+    let cursor = 0;
+    const stops: string[] = [];
+    for (const severity of SEVERITIES) {
+      const next = cursor + (severityCounts[severity] / findings.length) * 100;
+      if (next > cursor) {
+        stops.push(`${SEVERITY_COLORS[severity]} ${cursor}% ${next}%`);
+      }
+      cursor = next;
+    }
+    return `conic-gradient(${stops.join(", ")})`;
+  }, [findings.length, severityCounts]);
   const elapsed = analysis?.started_at
     ? formatDuration(
         (analysis.completed_at ? Date.parse(analysis.completed_at) : clock) -
@@ -150,6 +209,8 @@ export default function App() {
     setFindings([]);
     setArtifacts([]);
     setReport("");
+    setSeverityFilter("all");
+    setCategoryFilter("all");
     setEvents(await api.events(analysisId));
     await loadAnalysis(analysisId);
   }
@@ -447,6 +508,77 @@ export default function App() {
                 })}
               </section>
 
+              <section className="assessment-overview">
+                <article className="assessment-card severity-card">
+                  <div className="assessment-heading">
+                    <div>
+                      <span>RISK DISTRIBUTION</span>
+                      <h2>严重级别分布</h2>
+                    </div>
+                    <b>{findings.length.toString().padStart(2, "0")}</b>
+                  </div>
+                  <div className="severity-visual">
+                    <div
+                      aria-label={`共 ${findings.length} 个问题`}
+                      className="severity-donut"
+                      style={{ background: severityGradient }}
+                    >
+                      <div>
+                        <strong>{findings.length}</strong>
+                        <span>问题</span>
+                      </div>
+                    </div>
+                    <div className="severity-legend">
+                      {SEVERITIES.map((severity) => (
+                        <div key={severity}>
+                          <i style={{ background: SEVERITY_COLORS[severity] }} />
+                          <span>{SEVERITY_LABELS[severity]}</span>
+                          <b>{severityCounts[severity]}</b>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+
+                <article className="assessment-card category-card">
+                  <div className="assessment-heading">
+                    <div>
+                      <span>ISSUE CATEGORIES</span>
+                      <h2>分类评估</h2>
+                    </div>
+                    <b>{CATEGORIES.length.toString().padStart(2, "0")}</b>
+                  </div>
+                  <div className="category-bars">
+                    {CATEGORIES.map(({ key, label, note }) => {
+                      const count = categoryCounts[key];
+                      const percentage =
+                        findings.length > 0 ? (count / findings.length) * 100 : 0;
+                      return (
+                        <button
+                          className={categoryFilter === key ? "active" : ""}
+                          key={key}
+                          onClick={() =>
+                            setCategoryFilter((current) =>
+                              current === key ? "all" : key,
+                            )
+                          }
+                          type="button"
+                        >
+                          <span>
+                            <strong>{label}</strong>
+                            <small>{note}</small>
+                          </span>
+                          <span className="category-track">
+                            <i style={{ width: `${percentage}%` }} />
+                          </span>
+                          <b>{count}</b>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </article>
+              </section>
+
               <div className="history-strip">
                 {analyses.map((item) => (
                   <button
@@ -485,57 +617,98 @@ export default function App() {
 
               {activeTab === "findings" && (
                 <section className="tab-panel">
-                  <div className="filter-row">
+                  <div className="filter-row filter-row-labeled">
+                    <span className="filter-label">分类</span>
+                    <button
+                      className={categoryFilter === "all" ? "active" : ""}
+                      onClick={() => setCategoryFilter("all")}
+                      type="button"
+                    >
+                      全部
+                    </button>
+                    {CATEGORIES.map(({ key, label }) => (
+                      <button
+                        className={categoryFilter === key ? "active" : ""}
+                        key={key}
+                        onClick={() => setCategoryFilter(key)}
+                        type="button"
+                      >
+                        {label} {categoryCounts[key]}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="filter-row filter-row-labeled">
+                    <span className="filter-label">级别</span>
                     <button
                       className={severityFilter === "all" ? "active" : ""}
                       onClick={() => setSeverityFilter("all")}
+                      type="button"
                     >
-                      All {findings.length}
+                      全部 {findings.length}
                     </button>
                     {SEVERITIES.map((severity) => (
                       <button
                         className={severityFilter === severity ? "active" : ""}
                         key={severity}
                         onClick={() => setSeverityFilter(severity)}
+                        type="button"
                       >
-                        {severity} {severityCounts[severity]}
+                        {SEVERITY_LABELS[severity]} {severityCounts[severity]}
                       </button>
                     ))}
                   </div>
-                  <div className="finding-list">
-                    {visibleFindings.map((finding, index) => (
-                      <article className={`finding ${finding.severity}`} key={finding.id}>
-                        <div className="finding-index">{String(index + 1).padStart(2, "0")}</div>
-                        <div className="finding-body">
-                          <div className="finding-head">
-                            <span>{finding.severity}</span>
-                            <span>{finding.category}</span>
-                            <code>
-                              {finding.file_path ?? "project"}
-                              {finding.line ? `:${finding.line}` : ""}
-                            </code>
-                          </div>
-                          <h3>{finding.title}</h3>
-                          <p>{finding.evidence}</p>
-                          <div className="finding-note">
-                            <strong>影响</strong>
-                            <span>{finding.impact}</span>
-                          </div>
-                          <div className="finding-note">
-                            <strong>建议</strong>
-                            <span>{finding.recommendation}</span>
-                          </div>
+                  {groupedFindings.map((group, groupIndex) => (
+                    <section className="finding-category" key={group.key}>
+                      <header>
+                        <div>
+                          <span>
+                            {String(groupIndex + 1).padStart(2, "0")} / {group.note}
+                          </span>
+                          <h3>{group.label}评估</h3>
                         </div>
-                      </article>
-                    ))}
-                    {visibleFindings.length === 0 && (
-                      <div className="empty-state">
-                        {analysis?.status === "completed"
-                          ? "当前筛选条件下没有发现问题。"
-                          : "分析完成后将在这里显示问题。"}
+                        <b>{group.items.length}</b>
+                      </header>
+                      <div className="finding-list">
+                        {group.items.map((finding, index) => (
+                          <article
+                            className={`finding ${finding.severity}`}
+                            key={finding.id}
+                          >
+                            <div className="finding-index">
+                              {groupIndex + 1}.{String(index + 1).padStart(2, "0")}
+                            </div>
+                            <div className="finding-body">
+                              <div className="finding-head">
+                                <span>{SEVERITY_LABELS[finding.severity]}</span>
+                                <span>{group.label}</span>
+                                <code>
+                                  {finding.file_path ?? "项目级"}
+                                  {finding.line ? `:${finding.line}` : ""}
+                                </code>
+                              </div>
+                              <h3>{finding.title}</h3>
+                              <p>{finding.evidence}</p>
+                              <div className="finding-note">
+                                <strong>影响</strong>
+                                <span>{finding.impact}</span>
+                              </div>
+                              <div className="finding-note">
+                                <strong>建议</strong>
+                                <span>{finding.recommendation}</span>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
                       </div>
-                    )}
-                  </div>
+                    </section>
+                  ))}
+                  {visibleFindings.length === 0 && (
+                    <div className="empty-state">
+                      {analysis?.status === "completed"
+                        ? "当前筛选条件下没有发现问题。"
+                        : "分析完成后将在这里显示问题。"}
+                    </div>
+                  )}
                 </section>
               )}
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
@@ -276,45 +277,12 @@ class RepositoryAnalysisExecutor:
 
     async def _report_result(self, state: AnalysisState) -> AgentResult:
         findings = self._collect_findings(state.get("results", []))
-        severity_order = {"critical": 0, "major": 1, "minor": 2, "info": 3}
-        findings.sort(
-            key=lambda item: (
-                severity_order.get(str(item.get("severity")), 9),
-                str(item.get("title") or ""),
-            )
+        markdown = _build_report_markdown(
+            repository_name=self.repository_name,
+            state=state,
+            findings=findings,
+            snapshot=self.snapshot,
         )
-        lines = [
-            f"# {self.repository_name} 代码审查报告",
-            "",
-            f"- 仓库：{state.get('repository_url', '')}",
-            f"- 分支：{state.get('branch') or '默认分支'}",
-            f"- Commit：{self.snapshot.commit_sha or '未知'}",
-            f"- 文件数：{self.snapshot.file_count}",
-            f"- 问题数：{len(findings)}",
-            "",
-            "## 问题清单",
-            "",
-        ]
-        if not findings:
-            lines.append("未发现需要报告的问题。")
-        for index, finding in enumerate(findings, start=1):
-            location = finding.get("file_path") or "项目级"
-            if finding.get("line"):
-                location = f"{location}:{finding['line']}"
-            lines.extend(
-                [
-                    f"### {index}. [{finding.get('severity', 'info')}] "
-                    f"{finding.get('title', '未命名问题')}",
-                    "",
-                    f"- 分类：{finding.get('category', 'quality')}",
-                    f"- 位置：{location}",
-                    f"- 证据：{finding.get('evidence', '')}",
-                    f"- 影响：{finding.get('impact', '')}",
-                    f"- 建议：{finding.get('recommendation', '')}",
-                    "",
-                ]
-            )
-        markdown = "\n".join(lines)
         return AgentResult(
             role=AgentRole.REPORT,
             summary=f"生成 Markdown 审查报告，共 {len(findings)} 个问题。",
@@ -535,6 +503,123 @@ class RepositoryAnalysisExecutor:
     ) -> None:
         if self.event_emitter is not None:
             await self.event_emitter(event_type, role, message, data)
+
+
+def _build_report_markdown(
+    *,
+    repository_name: str,
+    state: AnalysisState,
+    findings: list[dict[str, Any]],
+    snapshot: RepositorySnapshot,
+) -> str:
+    """按分类和严重级别生成带汇总图表的 Markdown 报告。"""
+
+    category_labels = {
+        "architecture": "架构",
+        "test": "测试",
+        "security": "安全",
+        "quality": "质量",
+    }
+    category_order = {key: index for index, key in enumerate(category_labels)}
+    severity_order = {"critical": 0, "major": 1, "minor": 2, "info": 3}
+    severity_labels = {
+        "critical": "严重",
+        "major": "主要",
+        "minor": "次要",
+        "info": "提示",
+    }
+    findings.sort(
+        key=lambda item: (
+            category_order.get(str(item.get("category")), 99),
+            severity_order.get(str(item.get("severity")), 99),
+            str(item.get("title") or ""),
+        )
+    )
+    category_counts = Counter(
+        str(item.get("category") or "quality") for item in findings
+    )
+    severity_counts = Counter(
+        str(item.get("severity") or "info") for item in findings
+    )
+    total = len(findings)
+    lines = [
+        f"# {repository_name} 代码审查报告",
+        "",
+        f"- 仓库：{state.get('repository_url', '')}",
+        f"- 分支：{state.get('branch') or '默认分支'}",
+        f"- Commit：{snapshot.commit_sha or '未知'}",
+        f"- 文件数：{snapshot.file_count}",
+        f"- 问题数：{total}",
+        "",
+        "## 评估概览",
+        "",
+        "### 分类分布",
+        "",
+        "| 分类 | 数量 | 占比 | 条形图 |",
+        "| --- | ---: | ---: | --- |",
+    ]
+    for category, label in category_labels.items():
+        count = category_counts[category]
+        lines.append(
+            f"| {label} | {count} | {_percentage(count, total)} | "
+            f"`{_text_bar(count, total)}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "### 严重级别",
+            "",
+            "| 级别 | 数量 | 占比 | 条形图 |",
+            "| --- | ---: | ---: | --- |",
+        ]
+    )
+    for severity in ("critical", "major", "minor", "info"):
+        count = severity_counts[severity]
+        lines.append(
+            f"| {severity_labels[severity]} (`{severity}`) | {count} | "
+            f"{_percentage(count, total)} | `{_text_bar(count, total)}` |"
+        )
+    lines.extend(["", "## 分类明细", ""])
+
+    categories = list(category_labels)
+    categories.extend(
+        sorted(category for category in category_counts if category not in category_labels)
+    )
+    for category in categories:
+        category_findings = [
+            item for item in findings if str(item.get("category")) == category
+        ]
+        label = category_labels.get(category, category)
+        lines.extend([f"### {label}（{len(category_findings)}）", ""])
+        if not category_findings:
+            lines.extend(["本分类未发现问题。", ""])
+            continue
+        for index, finding in enumerate(category_findings, start=1):
+            location = str(finding.get("file_path") or "项目级")
+            if finding.get("line"):
+                location = f"{location}:{finding['line']}"
+            lines.extend(
+                [
+                    f"#### {index}. [{finding.get('severity', 'info')}] "
+                    f"{finding.get('title', '未命名问题')}",
+                    "",
+                    f"- 位置：{location}",
+                    f"- 证据：{finding.get('evidence', '')}",
+                    f"- 影响：{finding.get('impact', '')}",
+                    f"- 建议：{finding.get('recommendation', '')}",
+                    "",
+                ]
+            )
+    return "\n".join(lines)
+
+
+def _percentage(count: int, total: int) -> str:
+    return f"{(count / total * 100):.1f}%" if total else "0.0%"
+
+
+def _text_bar(count: int, total: int) -> str:
+    filled = 0 if count == 0 or total == 0 else max(1, round(count / total * 20))
+    return "█" * filled + "░" * (20 - filled)
 
 
 def _source_priority(path: str) -> int:

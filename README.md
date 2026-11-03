@@ -35,6 +35,7 @@ Git URL
 - 使用 PostgreSQL 保存 LangGraph checkpoint。
 - 通过 SSE 展示实时进度，并支持取消正在运行的分析。
 - 在 React + TypeScript 控制台中查看问题、时间线、Markdown 报告和历史运行。
+- 使用严重级别环形图和分类条形图展示问题分布，并按架构、测试、安全、质量分组列出问题。
 - 分析完成后可从页面顶部或报告页下载带仓库名和 Commit 前缀的 Markdown 报告。
 - 提供 FastAPI OpenAPI 文档和基础健康检查。
 

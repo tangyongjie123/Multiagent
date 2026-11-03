@@ -526,6 +526,189 @@ button:disabled {
   animation: pulse 1.3s infinite;
 }
 
+.assessment-overview {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.assessment-card {
+  padding: 16px;
+  border: 1px solid #c4c2ba;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.assessment-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.assessment-heading span {
+  color: #777b74;
+  font-family: "Cascadia Code", monospace;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.assessment-heading h2 {
+  margin: 5px 0 0;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+
+.assessment-heading > b {
+  color: #a0a39c;
+  font-family: "Cascadia Code", monospace;
+  font-size: 13px;
+}
+
+.severity-visual {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.severity-donut {
+  display: grid;
+  width: 126px;
+  height: 126px;
+  flex: 0 0 126px;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(23, 26, 24, 0.08);
+}
+
+.severity-donut > div {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  align-content: center;
+  border: 1px solid #d0cec6;
+  border-radius: 50%;
+  background: #f5f3ed;
+}
+
+.severity-donut strong {
+  font-size: 25px;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+
+.severity-donut span {
+  margin-top: 4px;
+  color: #777b74;
+  font-size: 9px;
+}
+
+.severity-legend {
+  display: grid;
+  flex: 1;
+  gap: 8px;
+}
+
+.severity-legend > div {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #dedcd5;
+  font-size: 10px;
+}
+
+.severity-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.severity-legend b {
+  font-family: "Cascadia Code", monospace;
+  font-size: 11px;
+}
+
+.category-bars {
+  display: grid;
+  gap: 7px;
+}
+
+.category-bars button {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) 28px;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 8px;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.category-bars button:hover,
+.category-bars button.active {
+  border-color: #b9b7af;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.category-bars button > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.category-bars button strong {
+  font-size: 11px;
+}
+
+.category-bars button small {
+  overflow: hidden;
+  color: #858880;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-bars button > b {
+  font-family: "Cascadia Code", monospace;
+  font-size: 10px;
+  text-align: right;
+}
+
+.category-track {
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid #d3d1c9;
+  background: #e7e5de;
+}
+
+.category-track i {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background: #171a18;
+  transition: width 300ms ease;
+}
+
+.category-bars button:nth-child(1) .category-track i {
+  background: #527b9b;
+}
+
+.category-bars button:nth-child(2) .category-track i {
+  background: #a27a3c;
+}
+
+.category-bars button:nth-child(3) .category-track i {
+  background: #b44343;
+}
+
+.category-bars button:nth-child(4) .category-track i {
+  background: #668b78;
+}
+
 .history-strip {
   display: flex;
   gap: 6px;
@@ -618,6 +801,52 @@ button:disabled {
   color: #efffb4;
   border-color: #171a18;
   background: #171a18;
+}
+
+.filter-row-labeled {
+  align-items: center;
+}
+
+.filter-label {
+  min-width: 34px;
+  color: #8a8d86;
+  font-family: "Cascadia Code", monospace;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.finding-category + .finding-category {
+  margin-top: 24px;
+}
+
+.finding-category > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid #bdbab2;
+}
+
+.finding-category > header span {
+  color: #7a7e76;
+  font-family: "Cascadia Code", monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.finding-category > header h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.035em;
+}
+
+.finding-category > header b {
+  color: #73776f;
+  font-family: "Cascadia Code", monospace;
+  font-size: 13px;
 }
 
 .finding-list {
@@ -839,6 +1068,10 @@ button:disabled {
   .agent-track {
     grid-template-columns: repeat(4, 1fr);
   }
+
+  .assessment-overview {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -898,6 +1131,20 @@ button:disabled {
 
   .agent-track {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .severity-visual {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .severity-donut {
+    align-self: center;
+  }
+
+  .category-bars button {
+    grid-template-columns: 88px minmax(0, 1fr) 24px;
+    gap: 7px;
   }
 
   .finding {
