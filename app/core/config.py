@@ -2,15 +2,31 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote_plus
 
+from dotenv import dotenv_values
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LOCAL_ENV_PATH = PROJECT_ROOT / ".env.local"
+
+
+def _apply_local_env_overrides() -> None:
+    """让本地覆盖文件优先于系统环境和基础 `.env`。"""
+
+    if not LOCAL_ENV_PATH.is_file():
+        return
+    for key, value in dotenv_values(LOCAL_ENV_PATH).items():
+        if value is not None:
+            os.environ[key] = value
+
+
+_apply_local_env_overrides()
 
 
 class Settings(BaseSettings):
@@ -42,8 +58,8 @@ class Settings(BaseSettings):
 
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-flash"
-    deepseek_pro_model: str = "deepseek-v4-pro"
+    deepseek_model: str = "deepseek-chat"
+    deepseek_pro_model: str = "deepseek-reasoner"
     chat_request_timeout_seconds: int = Field(default=120, ge=10, le=600)
 
     embedding_provider: str = "openai-compatible"

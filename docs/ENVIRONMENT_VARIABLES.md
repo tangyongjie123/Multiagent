@@ -4,6 +4,16 @@
 
 真实值写入项目根目录 `.env`。该文件已被 `.gitignore` 排除，不得提交、截图或粘贴到公开渠道。
 
+可选的 `.env.local` 同样是本地密钥文件并被 Git 忽略。项目会在读取配置前加载 `.env.local`，其值优先于系统环境变量和 `.env`，适合覆盖 IDE 中残留的旧 Key：
+
+```dotenv
+CHAT_PROVIDER=deepseek
+DEEPSEEK_API_KEY=replace-with-valid-key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_PRO_MODEL=deepseek-reasoner
+```
+
 ## 1. 应用配置
 
 | 变量 | 默认值 | 说明 |
