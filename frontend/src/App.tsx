@@ -229,9 +229,8 @@ export default function App() {
       .catch((requestError) => setError(String(requestError)));
     api
       .repositories()
-      .then(async (items) => {
+      .then((items) => {
         setRepositories(items);
-        if (items[0]) await selectRepository(items[0].id);
       })
       .catch((requestError) => setError(String(requestError)));
   }, []);
