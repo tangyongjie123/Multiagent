@@ -332,12 +332,17 @@ export default function App() {
     }
   }
 
-  function downloadReport() {
+  function downloadMarkdownReport() {
     if (!analysis) return;
     const anchor = document.createElement("a");
-    anchor.href = hasHtmlReport
-      ? api.reportHtmlDownloadUrl(analysis.id)
-      : api.reportDownloadUrl(analysis.id);
+    anchor.href = api.reportDownloadUrl(analysis.id);
+    anchor.click();
+  }
+
+  function downloadHtmlReport() {
+    if (!analysis) return;
+    const anchor = document.createElement("a");
+    anchor.href = api.reportHtmlDownloadUrl(analysis.id);
     anchor.click();
   }
 
@@ -447,10 +452,19 @@ export default function App() {
                   {analysis?.status === "completed" && (
                     <button
                       className="download-button"
-                      onClick={downloadReport}
+                      onClick={downloadMarkdownReport}
                       type="button"
                     >
-                      {hasHtmlReport ? "下载图文报告" : "下载报告"}
+                      下载 Markdown
+                    </button>
+                  )}
+                  {analysis?.status === "completed" && hasHtmlReport && (
+                    <button
+                      className="outline-button"
+                      onClick={downloadHtmlReport}
+                      type="button"
+                    >
+                      下载 HTML
                     </button>
                   )}
                   <button className="outline-button" disabled={busy} onClick={startAnalysis}>
@@ -750,17 +764,17 @@ export default function App() {
                     <span>{artifacts.length} artifacts</span>
                     {analysis?.status === "completed" && hasHtmlReport && (
                       <button
-                        className="download-button"
-                        onClick={downloadReport}
+                        className="outline-button"
+                        onClick={downloadHtmlReport}
                         type="button"
                       >
-                        下载图文报告
+                        下载 HTML 图文报告
                       </button>
                     )}
                     {analysis?.status === "completed" && (
                       <button
-                        className="outline-button"
-                        onClick={downloadReport}
+                        className="download-button"
+                        onClick={downloadMarkdownReport}
                         type="button"
                       >
                         下载 Markdown 报告

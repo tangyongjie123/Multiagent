@@ -107,7 +107,7 @@ npm run build
 ### 报告
 
 - 通过内嵌 HTML 在线查看带图表的完整报告。
-- 分析完成后，页面顶部和报告页都提供“下载报告”按钮。
+- 分析完成后，页面顶部和报告页分别提供“下载 Markdown”和“下载 HTML”按钮。
 - 优先下载自包含 HTML 报告，图片直接嵌入文件，无需额外资源。
 - 仍可单独下载包含内嵌 SVG 图片的 Markdown 报告。
 - 下载接口返回 `Content-Disposition: attachment`，文件名为 `仓库名-分析ID-report.html` 或 `.md`。
