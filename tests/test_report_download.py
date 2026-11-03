@@ -25,10 +25,10 @@ def test_report_path_must_stay_inside_analysis_workspace(
     )
 
     assert (
-        analyses_route._resolve_report_path(UUID(int=1), str(report))
+        analyses_route._resolve_artifact_path(UUID(int=1), str(report))
         == report.resolve()
     )
 
     outside = tmp_path / "outside.md"
     outside.write_text("not allowed", encoding="utf-8")
-    assert analyses_route._resolve_report_path(UUID(int=1), str(outside)) is None
+    assert analyses_route._resolve_artifact_path(UUID(int=1), str(outside)) is None

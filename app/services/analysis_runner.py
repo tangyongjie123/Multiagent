@@ -24,6 +24,11 @@ from app.db.models import (
 from app.db.session import get_session_factory
 from app.domain.models import AgentRole, AnalysisStatus
 from app.services.analysis_events import append_analysis_event
+from app.services.report_visuals import (
+    build_html_report,
+    build_report_visuals,
+    inject_markdown_visuals,
+)
 from app.services.repository import (
     clone_repository,
     repository_workspace,
@@ -249,10 +254,30 @@ async def _run_analysis(analysis_id: UUID) -> None:
             result.get("results", [])
         )
         report = _report_markdown(repo_name, result, findings)
+        visuals = build_report_visuals(
+            repository_name=repo_name,
+            findings=findings,
+        )
+        report = inject_markdown_visuals(report, visuals)
+        html_report = build_html_report(
+            repository_name=repo_name,
+            repository_url=repo_url,
+            branch=branch,
+            commit_sha=snapshot.commit_sha,
+            file_count=snapshot.file_count,
+            findings=findings,
+            visuals=visuals,
+        )
         artifact_dir = workspace / ".analysis"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         report_path = artifact_dir / "report.md"
         report_path.write_text(report, encoding="utf-8")
+        html_report_path = artifact_dir / "report.html"
+        html_report_path.write_text(html_report, encoding="utf-8")
+        severity_chart_path = artifact_dir / "severity-distribution.svg"
+        severity_chart_path.write_text(visuals.severity_svg, encoding="utf-8")
+        category_chart_path = artifact_dir / "category-distribution.svg"
+        category_chart_path.write_text(visuals.category_svg, encoding="utf-8")
         findings_path = artifact_dir / "findings.json"
         findings_path.write_text(
             json.dumps(findings, ensure_ascii=False, indent=2),
@@ -284,18 +309,27 @@ async def _run_analysis(analysis_id: UUID) -> None:
                 )
             for kind, name, path in (
                 ("report", "report.md", report_path),
+                ("report_html", "report.html", html_report_path),
+                ("severity_chart", "severity-distribution.svg", severity_chart_path),
+                ("category_chart", "category-distribution.svg", category_chart_path),
                 ("findings", "findings.json", findings_path),
                 ("repository", "repository.json", snapshot_path),
             ):
                 content = path.read_bytes()
+                if path.suffix == ".html":
+                    content_type = "text/html"
+                elif path.suffix == ".svg":
+                    content_type = "image/svg+xml"
+                elif path.suffix == ".md":
+                    content_type = "text/markdown"
+                else:
+                    content_type = "application/json"
                 session.add(
                     AnalysisArtifactRecord(
                         analysis_id=analysis_id,
                         kind=kind,
                         name=name,
-                        content_type=(
-                            "text/markdown" if kind == "report" else "application/json"
-                        ),
+                        content_type=content_type,
                         storage_path=str(path),
                         sha256=hashlib.sha256(content).hexdigest(),
                     )

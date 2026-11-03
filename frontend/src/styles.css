@@ -942,6 +942,13 @@ button:disabled {
   color: #2b2f2b;
 }
 
+.report-frame {
+  width: 100%;
+  min-height: 900px;
+  border: 1px solid #c7c5bd;
+  background: #f3eee1;
+}
+
 .timeline {
   display: grid;
 }

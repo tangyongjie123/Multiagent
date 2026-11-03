@@ -69,4 +69,8 @@ export const api = {
     `${API_BASE}/api/v1/analyses/${analysisId}/events/stream`,
   reportDownloadUrl: (analysisId: string) =>
     `${API_BASE}/api/v1/analyses/${analysisId}/report/download`,
+  reportHtmlUrl: (analysisId: string) =>
+    `${API_BASE}/api/v1/analyses/${analysisId}/report/html`,
+  reportHtmlDownloadUrl: (analysisId: string) =>
+    `${API_BASE}/api/v1/analyses/${analysisId}/report/html/download`,
 };

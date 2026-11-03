@@ -177,6 +177,7 @@ export default function App() {
     }
     return `conic-gradient(${stops.join(", ")})`;
   }, [findings.length, severityCounts]);
+  const hasHtmlReport = analysis?.status === "completed";
   const elapsed = analysis?.started_at
     ? formatDuration(
         (analysis.completed_at ? Date.parse(analysis.completed_at) : clock) -
@@ -334,7 +335,9 @@ export default function App() {
   function downloadReport() {
     if (!analysis) return;
     const anchor = document.createElement("a");
-    anchor.href = api.reportDownloadUrl(analysis.id);
+    anchor.href = hasHtmlReport
+      ? api.reportHtmlDownloadUrl(analysis.id)
+      : api.reportDownloadUrl(analysis.id);
     anchor.click();
   }
 
@@ -447,7 +450,7 @@ export default function App() {
                       onClick={downloadReport}
                       type="button"
                     >
-                      下载报告
+                      {hasHtmlReport ? "下载图文报告" : "下载报告"}
                     </button>
                   )}
                   <button className="outline-button" disabled={busy} onClick={startAnalysis}>
@@ -741,6 +744,15 @@ export default function App() {
                 <section className="tab-panel report-panel">
                   <div className="report-toolbar">
                     <span>{artifacts.length} artifacts</span>
+                    {analysis?.status === "completed" && hasHtmlReport && (
+                      <button
+                        className="download-button"
+                        onClick={downloadReport}
+                        type="button"
+                      >
+                        下载图文报告
+                      </button>
+                    )}
                     {analysis?.status === "completed" && (
                       <button
                         className="outline-button"
@@ -751,7 +763,15 @@ export default function App() {
                       </button>
                     )}
                   </div>
-                  <pre>{report || "分析完成后生成报告。"}</pre>
+                  {analysis?.status === "completed" && hasHtmlReport ? (
+                    <iframe
+                      className="report-frame"
+                      src={api.reportHtmlUrl(analysis.id)}
+                      title="可视化审查报告"
+                    />
+                  ) : (
+                    <pre>{report || "分析完成后生成报告。"}</pre>
+                  )}
                 </section>
               )}
             </>
