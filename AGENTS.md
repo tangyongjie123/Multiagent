@@ -133,6 +133,7 @@ Git URL
 
 - 需求以 `docs/PROJECT_REQUIREMENTS.md` 为准。
 - 安装、依赖、环境变量、启动方式、数据库要求、用户操作流程或 URL 发生变化时，必须同步更新 `docs/USER_MANUAL.md`。
+- 完成重要功能、发生项目方向调整或形成关键技术决策时，必须在 `docs/PROJECT_DEVELOPMENT_LOG.md` 追加开发记录和对话摘要。
 - 架构、数据库、前端和 Agent 提示词文档必须随代码同步更新。
 - 计费文档不属于当前项目范围。
 - 不创建无实际作用的占位文档。
