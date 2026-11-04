@@ -92,6 +92,8 @@ Service 执行副作用，主 Agent 只负责选择下一个分析角色。
 
 ## 快速启动
 
+首次安装、环境变量、数据库和故障处理请先阅读 [用户使用手册](docs/USER_MANUAL.md)。
+
 项目绑定以下 Conda 环境：
 
 ```text
@@ -165,6 +167,7 @@ docs/
   GRAPH_DATABASE.md          Neo4j 图谱设计
   MCP_TOOLS.md               MCP 只读工具与权限
   PROJECT_REQUIREMENTS.md    产品范围和验收标准
+  USER_MANUAL.md             安装、配置、启动和用户操作手册
 frontend/       React 可视化控制台
 scripts/        启动和 Neo4j 验证脚本
 tests/          Python 自动化测试
@@ -172,6 +175,7 @@ tests/          Python 自动化测试
 
 ## 文档
 
+- [用户使用手册](docs/USER_MANUAL.md)
 - [项目需求](docs/PROJECT_REQUIREMENTS.md)
 - [系统架构](docs/ARCHITECTURE.md)
 - [分析模型](docs/ANALYSIS_MODEL.md)
